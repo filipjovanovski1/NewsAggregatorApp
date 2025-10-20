@@ -1,0 +1,366 @@
+﻿:root {
+    --bg: #0b0d12;
+    --panel: #10131a;
+    --card: #161a22;
+    --text: #e9edf5;
+    --muted: #a8b0bf;
+    --accent: #5ca0ff;
+    --border: #232a36;
+    --max-globe: 98%;
+  --right-controls-width: 0px; 
+}
+
+html, body, #root {
+    height: 100%;
+}
+
+body {
+    margin: 0;
+    background: radial-gradient(1200px 800px at 50% 0%, #0f1320, #07090d);
+    color: var(--text);
+    font-family: system-ui, -apple-system, Segoe UI, Roboto, Inter, Arial, sans-serif;
+}
+
+.app {
+    min-height: 100%;
+}
+
+/* -------------------------------------------------------
+   DEFAULT (sticky) SEARCHBAR – used outside the header
+------------------------------------------------------- */
+.searchbar {
+    position: sticky;
+    top: 0;
+    z-index: 20;
+    background: linear-gradient(180deg, rgba(7,9,13,.9), rgba(7,9,13,.6) 80%, transparent);
+    padding: 12px 16px 0 16px;
+    backdrop-filter: blur(6px);
+}
+
+    .searchbar form {
+        display: flex;
+        gap: 8px;
+        max-width: 720px;
+        margin: 0 auto;
+    }
+
+    .searchbar input {
+        flex: 1;
+        padding: 10px 12px;
+        border-radius: 10px;
+        border: 1px solid var(--border);
+        background: var(--panel);
+        color: var(--text);
+        outline: none;
+    }
+
+    .searchbar button {
+        padding: 10px 14px;
+        border-radius: 10px;
+        border: 1px solid var(--border);
+        background: var(--card);
+        color: var(--text);
+        cursor: pointer;
+    }
+
+        .searchbar button:hover {
+            border-color: var(--accent);
+        }
+
+/* -------------------------------------------------------
+   HEADER ROW: Search + “What’s New” on ONE LINE
+------------------------------------------------------- */
+.topbar {
+    padding: 8px 16px;
+    height: var(--searchbar-h, 64px);
+    display: flex;
+    align-items: center;
+}
+
+.search-with-button {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    width: 100%;
+    flex-wrap: nowrap; /* prevent wrapping */
+}
+
+.search-wrap {
+    flex: 1 1 auto;
+    min-width: 0; /* allow shrink */
+    padding-left: clamp(0px, var(--right-controls-width), 25vw);
+}
+
+/* Override sticky/full-width behavior ONLY inside header,
+   and for the explicit inline variant from SearchBar */
+.topbar .searchbar,
+.searchbar.searchbar--inline {
+    position: static !important;
+    background: transparent !important;
+    backdrop-filter: none !important;
+    padding: 0 !important;
+    width: auto !important;
+    margin: 0 !important;
+}
+
+    .topbar .searchbar form,
+    .searchbar.searchbar--inline form {
+        display: flex !important;
+        align-items: center;
+        gap: 8px;
+        width: 100% !important;
+        max-width: none !important; /* remove 720px clamp */
+        margin: 0 !important; /* remove auto-centering */
+    }
+
+    .searchbar.searchbar--inline input[type="search"],
+    .searchbar.searchbar--inline input[type="text"],
+    .searchbar.searchbar--inline .input {
+        flex: 1 1 auto;
+        min-width: 0;
+    }
+
+/* “What’s New” button (light blue, flush right) */
+.whats-new-btn {
+    margin-left: auto; /* push to far right */
+    flex: 0 0 auto;
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    padding: 10px 14px;
+    border-radius: 999px;
+    background: #cfe9ff;
+    color: #0b3a63;
+    border: 1px solid #a9d3ff;
+    font-weight: 600;
+    white-space: nowrap;
+    cursor: pointer;
+    box-shadow: 0 2px 6px rgba(0,0,0,.08);
+    transition: background .12s ease, transform .06s ease, box-shadow .12s ease;
+}
+
+    .whats-new-btn:hover {
+        background: #b7ddff;
+    }
+
+    .whats-new-btn:active {
+        transform: translateY(1px);
+    }
+
+    .whats-new-btn:focus-visible {
+        outline: 3px solid rgba(82,172,255,.65);
+        outline-offset: 2px;
+        box-shadow: 0 0 0 4px rgba(82,172,255,.25);
+    }
+
+    .whats-new-btn .icon-globe {
+        display: block;
+    }
+
+/* ------------------------------------------------------- */
+.stage {
+    display: grid;
+    place-items: center;
+    width: 100vw;
+    height: calc(100vh - var(--searchbar-h));
+    padding: var(--stage-pad);
+    box-sizing: border-box;
+    overflow: hidden;
+    background: linear-gradient(180deg, #0b1220, #070b13);
+}
+
+.globe-wrap {
+    position: relative;
+    display: grid;
+    width: min(100%, var(--max-globe));
+    height: var(--max-globe);
+    overflow: visible;
+}
+
+.overlay {
+    position: fixed;
+    inset: 0;
+    z-index: 30;
+    background: rgba(3, 5, 8, 0.5);
+    display: grid;
+    place-items: center;
+}
+
+.overlay-inner {
+    width: min(1100px, 92vw);
+    height: min(80vh, 900px);
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 16px;
+    box-shadow: 0 20px 80px rgba(0,0,0,.45);
+    display: grid;
+    grid-template-rows: auto 1fr;
+    overflow: hidden;
+}
+
+.overlay-header {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 12px 16px;
+    background: rgba(255,255,255,.02);
+    border-bottom: 1px solid var(--border);
+}
+
+    .overlay-header h3 {
+        margin: 0;
+        font-weight: 600;
+    }
+
+    .overlay-header .count {
+        margin-left: auto;
+        color: var(--muted);
+    }
+
+    .overlay-header .close {
+        margin-left: 8px;
+        font-size: 20px;
+        line-height: 1;
+        width: 36px;
+        height: 36px;
+        border-radius: 10px;
+        border: 1px solid var(--border);
+        background: var(--card);
+        color: var(--text);
+        cursor: pointer;
+    }
+
+/* ---- Inline carousel arrows + grid ---- */
+.overlay-header-right {
+    margin-left: auto;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
+/* wrapper: [left arrow] [grid] [right arrow] */
+.grid3x-wrap {
+    display: grid;
+    grid-template-columns: 44px 1fr 44px; /* fixed arrow columns */
+    align-items: center;
+    gap: 8px;
+    padding: 12px 8px;
+}
+
+/* main grid (no side padding so arrows hug columns) */
+.grid3x {
+    padding: 16px 0;
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    grid-auto-rows: 1fr;
+    gap: 12px;
+    overflow: hidden;
+    will-change: transform, opacity;
+    animation: carouselIn .22s ease both;
+}
+
+@keyframes carouselIn {
+    from {
+        opacity: .6;
+        transform: translateX(10px);
+    }
+
+    to {
+        opacity: 1;
+        transform: translateX(0);
+    }
+}
+
+/* arrows aligned with grid */
+.arrow-side,
+.arrow-side-spacer {
+    width: 40px;
+    height: 40px;
+}
+
+.arrow-side {
+    border-radius: 50%;
+    border: 1px solid var(--border);
+    background: var(--card);
+    color: var(--text);
+    display: grid;
+    place-items: center;
+    cursor: pointer;
+    font-size: 18px;
+    line-height: 1;
+}
+
+    .arrow-side:hover {
+        border-color: var(--accent);
+    }
+
+    .arrow-side:disabled {
+        opacity: .45;
+        cursor: default;
+    }
+
+/* Cards */
+.article-card {
+    display: grid;
+    grid-template-rows: 140px auto;
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    background: var(--card);
+    color: inherit;
+    text-decoration: none;
+    overflow: hidden;
+}
+
+    .article-card .img {
+        background-size: cover;
+        background-position: center;
+    }
+
+    .article-card .meta {
+        padding: 10px 12px;
+        display: grid;
+        gap: 6px;
+    }
+
+    .article-card h4 {
+        margin: 0;
+        font-size: 15px;
+        line-height: 1.3;
+    }
+
+    .article-card .snippet {
+        margin: 0;
+        color: var(--muted);
+        font-size: 13px;
+        display: -webkit-box;
+        -webkit-line-clamp: 2;
+        -webkit-box-orient: vertical;
+        overflow: hidden;
+    }
+
+    .article-card .footer {
+        display: flex;
+        gap: 8px;
+        justify-content: space-between;
+        color: var(--muted);
+        font-size: 12px;
+    }
+
+/* Toast */
+.loader {
+    position: fixed;
+    bottom: 16px;
+    right: 16px;
+    padding: 10px 12px;
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    box-shadow: 0 6px 24px rgba(0,0,0,.35);
+}
+
+/* Responsive grid */
+@media (max-width: 560px) {
+    .grid3x {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+}
