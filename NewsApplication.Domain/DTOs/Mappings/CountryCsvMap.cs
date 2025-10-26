@@ -13,10 +13,10 @@ namespace NewsApplication.Domain.DTOs.Mappings
         public CountryCsvMap()
         {
             Map(m => m.COUNTRY).Name("COUNTRY");
-            Map(m => m.COUNTRYAFF).Name("COUNTRYAFF");
-            Map(m => m.AFF_ISO).Name("AFF_ISO");
+            Map(m => m.ISO).Name("ISO");
             Map(m => m.longitude).Name("longitude");
             Map(m => m.latitude).Name("latitude");
+            Map(m => m.ISO3).Name("ISO3");
         }
     }
 
