@@ -7,8 +7,8 @@ using NewsApplication.Domain.DTOs.Mappings;
 using NewsApplication.Repository.Db;
 using System.Globalization;
 
-
 namespace NewsApplication.Repository.Db.Importers;
+
 public sealed class CountryImporter
 {
     private readonly ApplicationDbContext _db;
@@ -37,36 +37,51 @@ public sealed class CountryImporter
         {
             var row = csv.Context.Parser!.RawRow;
 
-            // filter: only keep rows where COUNTRY == COUNTRYAFF
             var country = (r.COUNTRY ?? "").Trim();
-            var countryAff = (r.COUNTRYAFF ?? "").Trim();
-            if (!string.Equals(country, countryAff, StringComparison.Ordinal))
-                continue;
 
-            var iso2 = (r.AFF_ISO ?? "").Trim().ToUpperInvariant();
+            // ISO2 (required)
+            var iso2 = (r.ISO ?? "").Trim().ToUpperInvariant();
             if (iso2.Length != 2)
             {
-                errors.Add($"Row {row}: invalid AFF_ISO '{r.AFF_ISO}'");
+                errors.Add($"Row {row}: invalid ISO2 '{r.ISO}'");
                 continue;
             }
 
-            var name = countryAff; // we store COUNTRYAFF as Name
+            // ISO3 (optional but preferred)
+            string? iso3 = (r.ISO3 ?? "").Trim();
+            if (iso3.Length == 0)
+            {
+                iso3 = null; // allow null if the source row lacks ISO3
+            }
+            else
+            {
+                iso3 = iso3.ToUpperInvariant();
+                if (iso3.Length != 3)
+                {
+                    errors.Add($"Row {row}: invalid ISO3 '{r.ISO3}' (storing NULL)");
+                    iso3 = null;
+                }
+            }
 
+            // Name from COUNTRY
+            var name = country;
+
+            // Parse coords (same behavior)
             if (!TryParseDouble(r.latitude, out var lat) ||
                 !TryParseDouble(r.longitude, out var lng))
             {
-                // allow missing coords: store as nulls but log
                 errors.Add($"Row {row}: bad coords lat='{r.latitude}' lon='{r.longitude}' (storing nulls)");
                 lat = null; lng = null;
             }
 
-            // Upsert by PK = Iso2
+            // Upsert by PK = Iso2 (Iso2 remains canonical)
             var existing = await _db.Countries.FindAsync([iso2], ct);
             if (existing is null)
             {
                 _db.Countries.Add(new Country
                 {
                     Iso2 = iso2,
+                    Iso3 = iso3,             // <-- new
                     Name = name,
                     CentroidLat = lat,
                     CentroidLng = lng
@@ -74,11 +89,14 @@ public sealed class CountryImporter
             }
             else
             {
-                // Update name/coords if changed
                 if (!string.Equals(existing.Name, name, StringComparison.Ordinal))
                     existing.Name = name;
                 if (existing.CentroidLat != lat) existing.CentroidLat = lat;
                 if (existing.CentroidLng != lng) existing.CentroidLng = lng;
+
+                // Only set Iso3 when it's provided (don’t overwrite with null by accident)
+                if (!string.IsNullOrWhiteSpace(iso3) && !string.Equals(existing.Iso3, iso3, StringComparison.Ordinal))
+                    existing.Iso3 = iso3;
             }
 
             upserted++;

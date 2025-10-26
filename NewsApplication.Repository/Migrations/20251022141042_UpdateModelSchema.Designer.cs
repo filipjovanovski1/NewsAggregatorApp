@@ -2,6 +2,7 @@
 using System;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using NewsApplication.Repository.Db;
 using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
@@ -11,9 +12,11 @@ using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 namespace NewsApplication.Repository.Migrations
 {
     [DbContext(typeof(ApplicationDbContext))]
-    partial class ApplicationDbContextModelSnapshot : ModelSnapshot
+    [Migration("20251022141042_UpdateModelSchema")]
+    partial class UpdateModelSchema
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -101,19 +104,11 @@ namespace NewsApplication.Repository.Migrations
                     b.Property<double?>("CentroidLng")
                         .HasColumnType("double precision");
 
-                    b.Property<string>("Iso3")
-                        .HasMaxLength(3)
-                        .HasColumnType("character varying(3)");
-
                     b.Property<string>("Name")
                         .IsRequired()
                         .HasColumnType("text");
 
                     b.HasKey("Iso2");
-
-                    b.HasIndex("Iso3")
-                        .IsUnique()
-                        .HasFilter("\"Iso3\" IS NOT NULL");
 
                     b.ToTable("Countries");
                 });
@@ -161,65 +156,6 @@ namespace NewsApplication.Repository.Migrations
                         {
                             t.HasCheckConstraint("CK_ArticleScope_ExactlyOneKey", "(CASE WHEN \"CityId\" IS NULL THEN 0 ELSE 1 END) + (CASE WHEN \"CountryIso2\" IS NULL THEN 0 ELSE 1 END) + (CASE WHEN \"OtherValue\" IS NULL THEN 0 ELSE 1 END) = 1");
                         });
-                });
-
-            modelBuilder.Entity("NewsApplication.Repository.Db.Configurations.ScopeHelpers.CitySearchRow", b =>
-                {
-                    b.Property<string>("CountryIso2")
-                        .IsRequired()
-                        .HasColumnType("text");
-
-                    b.Property<string>("CountryIso3")
-                        .IsRequired()
-                        .HasColumnType("text");
-
-                    b.Property<string>("CountryName")
-                        .IsRequired()
-                        .HasColumnType("text");
-
-                    b.Property<Guid>("Id")
-                        .HasColumnType("uuid");
-
-                    b.Property<double?>("Latitude")
-                        .HasColumnType("double precision");
-
-                    b.Property<double?>("Longitude")
-                        .HasColumnType("double precision");
-
-                    b.Property<string>("Name")
-                        .IsRequired()
-                        .HasColumnType("text");
-
-                    b.Property<double>("Score")
-                        .HasColumnType("double precision");
-
-                    b.ToTable("CitySearchRow");
-                });
-
-            modelBuilder.Entity("NewsApplication.Repository.Db.Configurations.ScopeHelpers.CountrySearchRow", b =>
-                {
-                    b.Property<string>("CountryIso2")
-                        .IsRequired()
-                        .HasColumnType("text");
-
-                    b.Property<string>("CountryIso3")
-                        .IsRequired()
-                        .HasColumnType("text");
-
-                    b.Property<double?>("Latitude")
-                        .HasColumnType("double precision");
-
-                    b.Property<double?>("Longitude")
-                        .HasColumnType("double precision");
-
-                    b.Property<string>("Name")
-                        .IsRequired()
-                        .HasColumnType("text");
-
-                    b.Property<double>("Score")
-                        .HasColumnType("double precision");
-
-                    b.ToTable("CountrySearchRow");
                 });
 
             modelBuilder.Entity("NewsApplication.Domain.DomainModels.City", b =>

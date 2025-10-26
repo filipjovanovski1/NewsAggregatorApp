@@ -2,6 +2,7 @@
 using System;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using NewsApplication.Repository.Db;
 using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
@@ -11,9 +12,11 @@ using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 namespace NewsApplication.Repository.Migrations
 {
     [DbContext(typeof(ApplicationDbContext))]
-    partial class ApplicationDbContextModelSnapshot : ModelSnapshot
+    [Migration("20251026141631_AddIso3Index")]
+    partial class AddIso3Index
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -102,6 +105,7 @@ namespace NewsApplication.Repository.Migrations
                         .HasColumnType("double precision");
 
                     b.Property<string>("Iso3")
+                        .IsRequired()
                         .HasMaxLength(3)
                         .HasColumnType("character varying(3)");
 
@@ -169,10 +173,6 @@ namespace NewsApplication.Repository.Migrations
                         .IsRequired()
                         .HasColumnType("text");
 
-                    b.Property<string>("CountryIso3")
-                        .IsRequired()
-                        .HasColumnType("text");
-
                     b.Property<string>("CountryName")
                         .IsRequired()
                         .HasColumnType("text");
@@ -199,10 +199,6 @@ namespace NewsApplication.Repository.Migrations
             modelBuilder.Entity("NewsApplication.Repository.Db.Configurations.ScopeHelpers.CountrySearchRow", b =>
                 {
                     b.Property<string>("CountryIso2")
-                        .IsRequired()
-                        .HasColumnType("text");
-
-                    b.Property<string>("CountryIso3")
                         .IsRequired()
                         .HasColumnType("text");
 

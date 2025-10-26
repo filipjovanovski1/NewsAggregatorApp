@@ -8,9 +8,9 @@ namespace NewsApplication.Domain.DTOs.ImportedCSVs
     public sealed class CountryCsvDTO
     {
         public string COUNTRY { get; set; } = null!;
-        public string COUNTRYAFF { get; set; } = null!;
-        public string AFF_ISO { get; set; } = null!;
+        public string ISO { get; set; } = null!;
         public string? longitude { get; set; }     // keep as string, we'll parse safely
         public string? latitude { get; set; }
+        public string? ISO3 { get; set; }
     }
 }

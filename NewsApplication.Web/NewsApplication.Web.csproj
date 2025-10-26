@@ -17,13 +17,11 @@
 	  <TypeScriptCompile Remove="Data\**" />
   </ItemGroup>
 	<ItemGroup>
-		<Content Include="..\NewsApplication.Repository\Data\List_of_countries.csv"
-				 Link="Data\List_of_countries.csv">
+		<Content Include="..\NewsApplication.Repository\Data\List_of_countries.csv" Link="Data\List_of_countries.csv">
 			<CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
 		</Content>
 
-		<Content Include="..\NewsApplication.Repository\Data\List_of_cities.csv"
-				 Link="Data\List_of_cities.csv">
+		<Content Include="..\NewsApplication.Repository\Data\List_of_cities.csv" Link="Data\List_of_cities.csv">
 			<CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
 		</Content>
 	</ItemGroup>

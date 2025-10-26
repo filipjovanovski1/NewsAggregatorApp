@@ -361,3 +361,17 @@ MigrationBackup/
 
 # Fody - auto-generated XML schema
 FodyWeavers.xsd
+# Docker Postgres volume/data
+.docker/.postgres-data/
+
+# Optional: archives & logs
+*.zip
+*.log
+# Docker Postgres volume/data
+.docker/.postgres-data/
+
+
+# Optional: archives & logs
+*.zip
+*.log
+
