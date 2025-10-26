@@ -17,7 +17,7 @@
 	  <TypeScriptCompile Remove="Data\**" />
   </ItemGroup>
 	<ItemGroup>
-		<Content Include="..\NewsApplication.Repository\Data\List_of_countries.csv" Link="Data\List_of_countries.csv">
+		<Content Include="..\NewsApplication.Repository\Data\List_of_countries_with_ISO3.csv" Link="Data\List_of_countries_with_ISO3.csv">
 			<CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
 		</Content>
 
