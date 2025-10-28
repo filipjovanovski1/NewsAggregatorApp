@@ -3,6 +3,7 @@ using System;
 using System.Collections.Generic;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using NewsApplication.Repository.Db;
 using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
@@ -12,9 +13,11 @@ using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 namespace NewsApplication.Repository.Migrations
 {
     [DbContext(typeof(ApplicationDbContext))]
-    partial class ApplicationDbContextModelSnapshot : ModelSnapshot
+    [Migration("20251027111149_CreateArticleCacheItems")]
+    partial class CreateArticleCacheItems
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -49,7 +52,7 @@ namespace NewsApplication.Repository.Migrations
                     b.HasIndex("ScopeKey", "Page")
                         .IsUnique();
 
-                    b.ToTable("ArticleCaches");
+                    b.ToTable("ArticleCache");
                 });
 
             modelBuilder.Entity("NewsApplication.Domain.Cache.ArticleCacheItem", b =>
@@ -67,7 +70,7 @@ namespace NewsApplication.Repository.Migrations
 
                     b.HasIndex("ArticleId");
 
-                    b.ToTable("ArticleCacheItems");
+                    b.ToTable("ArticleCacheItem");
                 });
 
             modelBuilder.Entity("NewsApplication.Domain.DomainModels.Article", b =>
@@ -77,9 +80,7 @@ namespace NewsApplication.Repository.Migrations
 
                     b.PrimitiveCollection<List<string>>("Categories")
                         .IsRequired()
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("jsonb")
-                        .HasDefaultValueSql("'[]'::jsonb");
+                        .HasColumnType("jsonb");
 
                     b.Property<string>("Description")
                         .HasColumnType("text");
@@ -88,9 +89,7 @@ namespace NewsApplication.Repository.Migrations
                         .HasColumnType("text");
 
                     b.Property<DateTimeOffset>("InsertedAt")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("timestamp with time zone")
-                        .HasDefaultValueSql("NOW() AT TIME ZONE 'UTC'");
+                        .HasColumnType("timestamp with time zone");
 
                     b.Property<string>("Provider")
                         .IsRequired()
@@ -113,7 +112,7 @@ namespace NewsApplication.Repository.Migrations
 
                     b.HasKey("ArticleId");
 
-                    b.ToTable("Articles");
+                    b.ToTable("Article");
                 });
 
             modelBuilder.Entity("NewsApplication.Domain.DomainModels.City", b =>

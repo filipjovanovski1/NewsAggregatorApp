@@ -13,13 +13,14 @@ namespace NewsApplication.Domain.DomainModels
         [Key]
         
         public required string ArticleId { get; set; }
+        public string Provider { get; set; } = null!;   // no default here HAVE TO SET TO "NEWSDATA" LATER
         public string Title { get; set; } = null!;
         public string? Description { get; set; }
         public string? ImageUrl { get; set; }
         public string Publisher { get; set; } = null!;
-        public string Category { get; set; } = null!;           // or make an enum later
-        public string Link { get; set; } = null!;               // canonical URL to open
+        public string Url { get; set; } = null!;               // canonical URL to open
         public DateTime PublishedTime { get; set; }
-        public ICollection<ArticleScope> Scopes { get; set; } = new List<ArticleScope>();
+        public List<string> Categories { get; set; } = new();
+        public DateTimeOffset InsertedAt { get; set; } = DateTimeOffset.UtcNow;
     }
 }
