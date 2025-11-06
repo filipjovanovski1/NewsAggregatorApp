@@ -21,6 +21,21 @@ public sealed class ArticleIngestionService : IArticleIngestionService
         _repo = repo;
     }
 
+    public async Task<ArticleCache> GetOrFetchPageAsync(
+    string scopeKey, int page, int pageSize, CancellationToken ct)
+    {
+        var now = DateTimeOffset.UtcNow;
+
+        // Safeguard: if fresh, DO NOT call the API
+        if (await _repo.HasFreshPageAsync(scopeKey, page, now, ct))
+            return (await _repo.GetPageAsync(scopeKey, page, ct))!;  // return the full cached page
+
+        // Miss or expired → fetch + cache (this will set ExpiresAt = now + 10m)
+        return await FetchAndCachePageAsync(scopeKey, page, pageSize, ct);
+    }
+
+
+
     public async Task<ArticleCache> FetchAndCachePageAsync(
      string scopeKey, int page, int pageSize, CancellationToken ct)
     {

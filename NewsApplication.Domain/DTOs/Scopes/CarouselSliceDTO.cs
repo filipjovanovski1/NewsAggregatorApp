@@ -6,7 +6,8 @@ using System.Threading.Tasks;
 
 namespace NewsApplication.Domain.DTOs.Scopes
 {
-    internal class CarouselSliceDTO
+    public record CarouselSliceDTO
     {
+       
     }
 }

@@ -2,12 +2,16 @@
 
 export default function ArticleCard({ article }: { article: ArticleDto }) {
     const date = article.publishedUtc ? new Date(article.publishedUtc) : null;
-    const hasImg = (article as any).imageUrl; // optional in your DTO
+    const hasImg = Boolean(article.imageUrl);
 
     return (
         <a className="article-card" href={article.url} target="_blank" rel="noreferrer">
             {hasImg && (
-                <div className="img" style={{ backgroundImage: `url(${(article as any).imageUrl})` }} aria-hidden />
+                <div
+                    className="img"
+                    style={{ backgroundImage: `url(${article.imageUrl})` }}
+                    aria-hidden
+                />
             )}
             <div className="meta">
                 <h4 title={article.title}>{article.title}</h4>

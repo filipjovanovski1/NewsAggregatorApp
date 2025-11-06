@@ -54,15 +54,21 @@ namespace NewsApplication.Repository.Db
                  .Metadata.SetValueComparer(categoriesComparer);
 
                 b.Property<DateTimeOffset>("InsertedAt")
-                .HasDefaultValueSql("NOW() AT TIME ZONE 'UTC'");
+                .HasColumnType("timestamptz")
+                .HasDefaultValueSql("now()");
             });
             // ArticleCacheItem
             modelBuilder.Entity<ArticleCache>(b =>
             {
                 b.ToTable("ArticleCaches");
                 b.HasKey(x => x.Id);
-                b.HasIndex(x => new { x.ScopeKey, x.Page }).IsUnique();
+
+                b.Property(x => x.ExpiresAt)
+                .HasColumnType("timestamptz");   // <- explicit
                 b.HasIndex(x => x.ExpiresAt);
+
+                // Enforce single live row per (ScopeKey, Page)
+                b.HasIndex(x => new { x.ScopeKey, x.Page }).IsUnique();
             });
 
             modelBuilder.Entity<ArticleCacheItem>(b =>

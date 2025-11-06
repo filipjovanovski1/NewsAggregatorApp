@@ -1,16 +1,14 @@
 ﻿// DTOs based on your NewsApplication_Summary.docx
-export interface ArticleDto {
+
+export type ArticleDto = {
     id: string;
     title: string;
     url: string;
-    publishedUtc: string; // ISO string
-    sourceName: string;
-    snippet?: string | null;
-    countryIso2?: string | null;
-    cityName?: string | null;
-    imageUrl?: string | null; // optional if you have it
-    category?: string | null;
-}
+    snippet?: string;
+    sourceName?: string;
+    imageUrl?: string;
+    publishedUtc?: string;
+};
 
 export type ApiPlace = {
     kind: 'country' | 'city';

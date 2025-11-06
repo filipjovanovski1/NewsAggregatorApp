@@ -1,73 +1,119 @@
-﻿// Centralized API calls
-import type { ArticleDto, PagedResult } from './types';
+﻿// src/api.ts
 
-const API_BASE = '/api';
+// ---------- Shared client-side DTOs you actually render ----------
+export type ArticleDto = {
+    id: string;
+    title: string;
+    url: string;
+    snippet?: string;
+    sourceName?: string;
+    imageUrl?: string;
+    publishedUtc?: string; // ISO string
+};
 
-export interface ArticleQuery {
-    take?: number;
-    category?: string | null;
-    page?: number;
-    pageSize?: number;
-}
+// Server-side item (what /articles/search returns per item)
+export type SearchItem = {
+    articleId: string;
+    provider: string;
+    title: string;
+    description?: string;
+    imageUrl?: string;
+    publisher?: string;
+    url: string;
+    publishedTime: string;   // ISO string
+    categories?: string[];
+};
 
-/** Shared fetch wrapper that logs URL and surfaces server error text */
-async function fetchJson<T>(url: URL, label: string): Promise<T> {
-    const href = url.toString();
-    console.debug(`[GET] ${label}`, href);
-    const res = await fetch(href);
+// Entire /articles/search response (server)
+export type SearchResponse = {
+    scopeKey: string;
+    uiPage: number;                          // which UI page was requested
+    pageSize: number;                        // always 6
+    hasNewer: boolean;
+    hasOlder: boolean;
+    totalDistinct: number;
+    nextUiPage: number;
+    prefetch?: { providerPage: number; providerPageSize: number };
+    items: SearchItem[];
+};
 
-    if (!res.ok) {
-        let body = '';
-        try { body = await res.text(); } catch { /* ignore */ }
-        // Include status and any ProblemDetails/exception text coming from ASP.NET
-        throw new Error(`${label} failed: ${res.status} · ${body}`);
+// /scope/resolve
+export type ResolveScopeResponse = {
+    scopeKey: string;
+    kind: 'city' | 'country' | 'query';
+    label: string;
+};
+
+// The request body we send to /scope/resolve
+export type ResolveScopeBody =
+    | { q: string }
+    | { city: { id: number; name: string; countryIso2: string } }
+    | { country: { iso2: string; name: string } };
+
+// /search/preview — only the bits we need for pills
+export type PreviewCountryMatch = {
+    Iso2?: string;
+    CountryIso2?: string;
+    Display?: string;
+    Name?: string;
+};
+export type PreviewCityMatch = {
+    Id?: number;
+    CityId?: number;
+    CountryIso2?: string;
+    Display?: string;
+    Name?: string;
+};
+export type PreviewResponse = {
+    CountryMatches?: PreviewCountryMatch[];
+    CityMatches?: PreviewCityMatch[];
+};
+
+// ---------- tiny typed fetch helper ----------
+async function getJSON<T>(input: RequestInfo | URL, init?: RequestInit): Promise<T> {
+    const r = await fetch(input, init);
+    if (!r.ok) {
+        const msg = await r.text().catch(() => String(r.status));
+        throw new Error(`HTTP ${r.status}: ${msg}`);
     }
-    return res.json() as Promise<T>;
+    return (await r.json()) as T;
 }
 
-// ===== WORLD / TOP =====
-export async function getTopWorldArticles(q?: ArticleQuery): Promise<PagedResult<ArticleDto>> {
-    const url = new URL(`${API_BASE}/world/articles`, window.location.origin);
-    if (q?.take != null) url.searchParams.set('take', String(q.take));
-    if (q?.category) url.searchParams.set('category', String(q.category));
-    if (q?.page != null) url.searchParams.set('page', String(q.page));
-    if (q?.pageSize != null) url.searchParams.set('pageSize', String(q.pageSize));
-    return fetchJson<PagedResult<ArticleDto>>(url, 'TopWorld fetch');
+// ---------- API calls ----------
+export function preview(q: string): Promise<PreviewResponse> {
+    return getJSON<PreviewResponse>(`/search/preview?q=${encodeURIComponent(q)}`);
 }
 
-// ===== BY COUNTRY =====
-export async function getCountryArticles(iso2: string, q?: ArticleQuery): Promise<PagedResult<ArticleDto>> {
-    const url = new URL(`${API_BASE}/countries/${encodeURIComponent(iso2)}/articles`, window.location.origin);
-    if (q?.take != null) url.searchParams.set('take', String(q.take));
-    if (q?.category) url.searchParams.set('category', String(q.category));
-    if (q?.page != null) url.searchParams.set('page', String(q.page));
-    if (q?.pageSize != null) url.searchParams.set('pageSize', String(q.pageSize));
-    return fetchJson<PagedResult<ArticleDto>>(url, 'Country fetch');
+export function resolveScope(body: ResolveScopeBody): Promise<ResolveScopeResponse> {
+    return getJSON<ResolveScopeResponse>('/scope/resolve', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+    });
 }
 
-// ===== BY CITY =====
-export async function getCityArticles(cityId: string | number, q?: ArticleQuery): Promise<PagedResult<ArticleDto>> {
-    const url = new URL(`${API_BASE}/cities/${encodeURIComponent(String(cityId))}/articles`, window.location.origin);
-    if (q?.take != null) url.searchParams.set('take', String(q.take));
-    if (q?.category) url.searchParams.set('category', String(q.category));
-    if (q?.page != null) url.searchParams.set('page', String(q.page));
-    if (q?.pageSize != null) url.searchParams.set('pageSize', String(q.pageSize));
-    return fetchJson<PagedResult<ArticleDto>>(url, 'City fetch');
+export function searchArticles(scopeKey: string, uiPage: number): Promise<SearchResponse> {
+    return getJSON<SearchResponse>(`/articles/search?scopeKey=${encodeURIComponent(scopeKey)}&uiPage=${uiPage}`, {
+        method: 'POST',
+    });
 }
 
-// ===== SEARCH =====
-export interface SearchResult {
-    kind: 'country' | 'city';
-    idOrIso: string | number;
-    name: string;
-    lat?: number;
-    lng?: number;
-    // if your backend returns iso2 explicitly for countries, great:
-    iso2?: string;
+export function prewarm(scopeKey: string, providerPage: number): Promise<Record<string, unknown>> {
+    return getJSON<Record<string, unknown>>(
+        `/articles/cache/fetch?scopeKey=${encodeURIComponent(scopeKey)}&page=${providerPage}`,
+        { method: 'POST' }
+    );
 }
 
-export async function searchPlaces(query: string): Promise<SearchResult[]> {
-    const url = new URL(`${API_BASE}/search`, window.location.origin);
-    url.searchParams.set('q', query);
-    return fetchJson<SearchResult[]>(url, 'Search');
+// ---------- Mapping helper: SearchItem -> ArticleDto for your UI ----------
+export function toArticleDto(x: SearchItem): ArticleDto {
+    return {
+        id: x.articleId,
+        title: x.title,
+        url: x.url,
+        snippet: x.description,
+        sourceName: x.publisher ?? x.provider,
+        imageUrl: x.imageUrl,
+        publishedUtc: x.publishedTime
+    };
 }

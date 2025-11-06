@@ -8,4 +8,7 @@ public interface IArticleIngestionService
 {
     Task<ArticleCache> FetchAndCachePageAsync(
         string scopeKey, int page, int pageSize, CancellationToken ct);
+
+    Task<ArticleCache> GetOrFetchPageAsync(string scopeKey, int page, int pageSize, CancellationToken ct);
+
 }

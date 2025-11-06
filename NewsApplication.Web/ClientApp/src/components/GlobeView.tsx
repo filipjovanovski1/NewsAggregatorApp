@@ -1,12 +1,45 @@
 ﻿import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import Globe from 'react-globe.gl';
 
-type GlobeRef = any;
+/* ---------- Minimal types we actually use ---------- */
+type LngLat = [number, number];
+
+interface PolygonGeometry {
+    type: 'Polygon';
+    coordinates: LngLat[][];
+}
+interface MultiPolygonGeometry {
+    type: 'MultiPolygon';
+    coordinates: LngLat[][][];
+}
+type Geometry = PolygonGeometry | MultiPolygonGeometry | null;
+
+interface Feature {
+    type: 'Feature';
+    properties: Record<string, unknown>;
+    geometry: Geometry;
+}
+
+type Point = { lat: number; lng: number };
+
+type GlobeControls = {
+    minDistance: number;
+    maxDistance: number;
+    enableDamping: boolean;
+    dampingFactor: number;
+    update: () => void;
+};
+
+type GlobeApi = {
+    controls?: () => GlobeControls | undefined;
+    getGlobeRadius?: () => number;
+    pointOfView?: (pov: { lat: number; lng: number; altitude: number }, ms?: number) => void;
+};
 
 interface Props {
     onPick: (lat: number, lng: number) => void;
     /** Called when a country polygon is clicked (ISO-2 provided). */
-    onPickCountry?: (iso2: string, lat: number, lng: number) => void;
+    onPickCountry?: (iso2: string, iso3: string, lat: number, lng: number) => void;
     focus?: { lat: number; lng: number; altitude?: number } | null;
     /** ISO-2 of country to outline (e.g. "FR"). Pass null/undefined to clear. */
     highlightIso2?: string | null;
@@ -14,14 +47,20 @@ interface Props {
     cityMarker?: { lat: number; lng: number } | null;
 }
 
-export default function GlobeView({ onPick, onPickCountry, focus, highlightIso2, cityMarker }: Props) {
-    const globeRef = useRef<GlobeRef>(null);
+export default function GlobeView({
+    onPick,
+    onPickCountry,
+    focus,
+    highlightIso2,
+    cityMarker
+}: Props) {
+    const globeRef = useRef<GlobeApi | null>(null);
     const wrapRef = useRef<HTMLDivElement>(null);
-    const [size, setSize] = useState({ w: 600, h: 600 });
 
-    const [allFeatures, setAllFeatures] = useState<any[] | null>(null);
-    const [polyData, setPolyData] = useState<any[]>([]);
-    const [points, setPoints] = useState<any[]>([]); // city dot
+    const [size, setSize] = useState({ w: 600, h: 600 });
+    const [allFeatures, setAllFeatures] = useState<Feature[] | null>(null);
+    const [polyData, setPolyData] = useState<Feature[]>([]);
+    const [points, setPoints] = useState<Point[]>([]);
 
     /* Measure searchbar height -> CSS var so stage can be 100vh - searchbar */
     useLayoutEffect(() => {
@@ -60,7 +99,8 @@ export default function GlobeView({ onPick, onPickCountry, focus, highlightIso2,
             try {
                 const res = await fetch('/data/countries.json');
                 const gj = await res.json();
-                if (!cancelled) setAllFeatures(Array.isArray(gj?.features) ? gj.features : []);
+                const features = Array.isArray(gj?.features) ? (gj.features as Feature[]) : [];
+                if (!cancelled) setAllFeatures(features);
             } catch {
                 if (!cancelled) setAllFeatures([]);
             }
@@ -70,18 +110,58 @@ export default function GlobeView({ onPick, onPickCountry, focus, highlightIso2,
         };
     }, []);
 
-    // Helpers to read ISO-2 (handles Natural Earth "-99" quirk)
-    const pick = (v: any) => (v == null ? '' : String(v).toUpperCase());
-    const getIso = useCallback((p: any): string => {
-        const pick = (v: any) => (v == null ? '' : String(v).toUpperCase());
-        const p0 = p ?? {};
-        const ISO2 = 'ISO2', ISO_A2 = 'ISO_A2', ISO_A2_EH = 'ISO_A2_EH', ADM0_A3 = 'ADM0_A3', adm0_a3 = 'adm0_a3', ISO = 'ISO';
+    // Uppercase string value of a property, tolerant of unknowns
+    function upOf(props: Record<string, unknown>, key: string): string {
+        const v = props[key];
+        if (v == null) return '';
+        return typeof v === 'string' ? v.toUpperCase() : String(v).toUpperCase();
+    }
 
-        const isoA2 = pick(p0[ISO_A2]);
-        const isoA2eh = pick(p0[ISO_A2_EH]);
-        let iso = (!isoA2 || isoA2 === '-99') ? isoA2eh : isoA2;
-        if (!iso) iso = pick(p0.iso_a2 ?? p0[ISO2] ?? p0.iso2 ?? p0[ISO] ?? p0[ADM0_A3] ?? p0[adm0_a3]);
+    // Return the first non-empty uppercased value among keys
+    function firstUp(props: Record<string, unknown>, keys: string[]): string {
+        for (const k of keys) {
+            const v = upOf(props, k);
+            if (v) return v;
+        }
+        return '';
+    }
+
+    // Extract ISO-2 (handles Natural Earth "-99" quirk)
+    const getIso = useCallback((props: Record<string, unknown> | undefined): string => {
+        if (!props) return '';
+
+        const ISO_A2 = upOf(props, 'ISO_A2');
+        const ISO_A2_EH = upOf(props, 'ISO_A2_EH');
+
+        // Prefer true A2; NE sometimes uses -99 and stores usable code in ISO_A2_EH
+        let iso = (!ISO_A2 || ISO_A2 === '-99') ? ISO_A2_EH : ISO_A2;
+
+        // Fallbacks (some datasets put codes in alternative fields)
+        if (!iso) {
+            iso = firstUp(props, [
+                'iso_a2',     // lower-case variant
+                'ISO2',       // generic alt
+                'iso2',
+                'ISO',        // generic alt (be cautious)
+                'ADM0_A3',    // last-resort: often ISO-3; only as a fallback to avoid empty
+                'adm0_a3'
+            ]);
+        }
         return iso;
+    }, []);
+
+
+    const getIso3 = useCallback((props: Record<string, unknown> | undefined): string | null => {
+        if (!props) return null;
+
+        const a3 = firstUp(props, [
+            'ISO_A3',      // standard
+            'iso_a3',      // lower-case variant
+            'ADM0_A3',     // Natural Earth commonly has this
+            'adm0_a3'
+        ]);
+
+        return a3 || null;
     }, []);
 
 
@@ -92,11 +172,11 @@ export default function GlobeView({ onPick, onPickCountry, focus, highlightIso2,
             setPolyData([]);
             return;
         }
-        const matches = allFeatures.filter((f: any) => getIso(f?.properties) === isoWanted);
+        const matches = allFeatures.filter(f => getIso(f.properties) === isoWanted);
         setPolyData(matches);
     }, [highlightIso2, allFeatures, getIso]);
 
-    // City marker (single point) — RED and smaller (50%)
+    // City marker (single point)
     useEffect(() => {
         if (cityMarker && Number.isFinite(cityMarker.lat) && Number.isFinite(cityMarker.lng)) {
             setPoints([{ lat: cityMarker.lat, lng: cityMarker.lng }]);
@@ -105,23 +185,23 @@ export default function GlobeView({ onPick, onPickCountry, focus, highlightIso2,
         }
     }, [cityMarker]);
 
-    // Limit zoom
+    // Limit zoom / damping
     useEffect(() => {
         const g = globeRef.current;
-        if (!g) return;
-        const controls = g.controls?.();
-        if (!controls) return;
-        const R = typeof g.getGlobeRadius === 'function' ? g.getGlobeRadius() : 100;
-        controls.minDistance = R * 1.5;
-        controls.maxDistance = R * 6;
-        controls.enableDamping = true;
-        controls.dampingFactor = 0.05;
-        controls.update();
+        const ctrls = g?.controls?.();
+        if (!g || !ctrls) return;
+
+        const R = g.getGlobeRadius?.() ?? 100;
+        ctrls.minDistance = R * 1.5;
+        ctrls.maxDistance = R * 6;
+        ctrls.enableDamping = true;
+        ctrls.dampingFactor = 0.05;
+        ctrls.update();
     }, [size]);
 
     /* Smooth camera fly when focus changes */
     useEffect(() => {
-        if (focus && globeRef.current) {
+        if (focus && globeRef.current?.pointOfView) {
             globeRef.current.pointOfView(
                 { lat: focus.lat, lng: focus.lng, altitude: focus.altitude ?? 1.3 },
                 1000
@@ -129,23 +209,30 @@ export default function GlobeView({ onPick, onPickCountry, focus, highlightIso2,
         }
     }, [focus]);
 
-    // --- helpers for polygon centroid (fallback)
-    const centroidFromFeature = (f: any): { lat: number; lng: number } => {
-        const g = f?.geometry;
+    // Compute a rough centroid if click coords aren't provided
+    const centroidFromFeature = (f: Feature): { lat: number; lng: number } => {
+        const g = f.geometry;
         if (!g) return { lat: 0, lng: 0 };
 
-        const ringAvg = (ring: number[][]) => {
-            let sumLat = 0, sumLng = 0;
+        const ringAvg = (ring: LngLat[]) => {
+            let sumLat = 0;
+            let sumLng = 0;
             const n = ring.length || 1;
-            for (const [lng, lat] of ring) { sumLat += lat; sumLng += lng; }
+            for (const [lng, lat] of ring) {
+                sumLat += lat;
+                sumLng += lng;
+            }
             return { lat: sumLat / n, lng: sumLng / n };
         };
 
-        if (g.type === 'Polygon') return ringAvg(g.coordinates[0]);
+        if (g.type === 'Polygon') {
+            return ringAvg(g.coordinates[0] ?? []);
+        }
         if (g.type === 'MultiPolygon') {
             let sumLat = 0, sumLng = 0, k = 0;
             for (const poly of g.coordinates) {
-                const avg = ringAvg(poly[0]); sumLat += avg.lat; sumLng += avg.lng; k++;
+                const avg = ringAvg(poly[0] ?? []);
+                sumLat += avg.lat; sumLng += avg.lng; k++;
             }
             return { lat: sumLat / (k || 1), lng: sumLng / (k || 1) };
         }
@@ -155,24 +242,24 @@ export default function GlobeView({ onPick, onPickCountry, focus, highlightIso2,
     return (
         <div ref={wrapRef} className="globe-wrap">
             <Globe
-                ref={globeRef}
+                ref={globeRef as unknown as React.MutableRefObject<GlobeApi>}
                 width={size.w}
                 height={size.h}
-
                 /* Single-click anywhere → reverse lookup (keeps city picks working) */
                 onGlobeClick={({ lat, lng }: { lat: number; lng: number }) => onPick(lat, lng)}
-
-                /* Clicking a filled country polygon → send ISO-2 to the app so it fetches country articles */
-                onPolygonClick={(poly: any, _evt: any, extra?: { lat: number; lng: number }) => {
+                /* Clicking a filled country polygon → send ISO-2; fall back to centroid */
+                onPolygonClick={(poly: Feature, _evt, extra?: { lat: number; lng: number }) => {
                     const c = extra && Number.isFinite(extra.lat) && Number.isFinite(extra.lng)
                         ? { lat: extra.lat, lng: extra.lng }
                         : centroidFromFeature(poly);
 
-                    const iso = getIso(poly?.properties);
-                    if (iso && typeof onPickCountry === 'function') {
-                        onPickCountry(iso, c.lat, c.lng);
+                    const iso2 = getIso(poly?.properties);
+                    const iso3 = getIso3(poly?.properties);
+
+                    if (iso2 && typeof onPickCountry === 'function') {
+                        onPickCountry(iso2, iso3, c.lat, c.lng);   // <-- now passing ISO-3 too
                     } else {
-                        onPick(c.lat, c.lng); // fallback
+                        onPick(c.lat, c.lng);
                     }
                 }}
 
@@ -183,21 +270,19 @@ export default function GlobeView({ onPick, onPickCountry, focus, highlightIso2,
                 showAtmosphere
                 atmosphereColor="lightskyblue"
                 atmosphereAltitude={0.25}
-
                 /* Country outline (stroke only) */
                 polygonsData={polyData}
                 polygonAltitude={() => 0.01}
                 polygonCapColor={() => 'rgba(0,0,0,0)'}
                 polygonSideColor={() => 'rgba(0,0,0,0)'}
                 polygonStrokeColor={() => '#39FF14'}  /* lime */
-
-                /* City dot — RED and smaller */
+                /* City dot */
                 pointsData={points}
                 pointLat="lat"
                 pointLng="lng"
                 pointAltitude={() => 0.02}
-                pointColor={() => '#FF3B30'}          /* red */
-                pointRadius={0.15}                   /* 50% smaller than 0.35 */
+                pointColor={() => '#FF3B30'}
+                pointRadius={0.15}
             />
         </div>
     );

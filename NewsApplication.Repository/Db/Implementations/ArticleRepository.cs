@@ -81,10 +81,10 @@ public sealed class ArticleRepository : IArticleRepository
     public async Task<ArticleCache?> GetPageAsync(string scopeKey, int page, CancellationToken ct = default)
     {
         return await _db.ArticleCaches
-            .Include(c => c.Items)
-                .ThenInclude(i => i.Article)
-            .AsNoTracking()
-            .FirstOrDefaultAsync(c => c.ScopeKey == scopeKey && c.Page == page, ct);
+       .Where(c => c.ScopeKey == scopeKey && c.Page == page && c.ExpiresAt > DateTimeOffset.UtcNow)
+       .Include(c => c.Items).ThenInclude(i => i.Article)
+       .FirstOrDefaultAsync(ct);
+
     }
 
     // -----------------------------
@@ -93,14 +93,15 @@ public sealed class ArticleRepository : IArticleRepository
     //  - Idempotently insert ArticleCacheItem rows (ON CONFLICT DO NOTHING)
     // -----------------------------
     public async Task<ArticleCache> PutPageAsync(
-        string scopeKey,
-        int page,
-        string? nextPageToken,
-        DateTimeOffset expiresAt,
-        IReadOnlyList<(string articleId, int? position)> items,
-        CancellationToken ct = default)
+    string scopeKey,
+    int page,
+    string? nextPageToken,
+    DateTimeOffset expiresAt,
+    IReadOnlyList<(string articleId, int? position)> items,
+    CancellationToken ct = default)
     {
-        // 1) Upsert ArticleCache by (ScopeKey, Page)
+        // Always create a new versioned row
+        // Overwrite the single row for (ScopeKey, Page)
         var cache = await _db.ArticleCaches
             .FirstOrDefaultAsync(c => c.ScopeKey == scopeKey && c.Page == page, ct);
 
@@ -114,7 +115,7 @@ public sealed class ArticleRepository : IArticleRepository
                 ExpiresAt = expiresAt
             };
             _db.ArticleCaches.Add(cache);
-            await _db.SaveChangesAsync(ct); // ensure Id for items
+            await _db.SaveChangesAsync(ct); // get Id
         }
         else
         {
@@ -123,12 +124,12 @@ public sealed class ArticleRepository : IArticleRepository
             await _db.SaveChangesAsync(ct);
         }
 
-        // 2) Idempotent link insert (batch)
+
         if (items.Count > 0)
         {
             var sb = new StringBuilder();
             sb.AppendLine(@"INSERT INTO ""ArticleCacheItems"" (""ArticleCacheId"", ""ArticleId"", ""Position"") VALUES");
-            var parameters = new List<NpgsqlParameter>();
+            var parameters = new List<Npgsql.NpgsqlParameter>();
 
             for (int i = 0; i < items.Count; i++)
             {
@@ -136,19 +137,18 @@ public sealed class ArticleRepository : IArticleRepository
                 if (i > 0) sb.AppendLine(",");
                 sb.Append($"(@cid{i}, @aid{i}, @pos{i})");
 
-                parameters.Add(new NpgsqlParameter($"cid{i}", cache.Id));
-                parameters.Add(new NpgsqlParameter($"aid{i}", articleId));
-                parameters.Add(new NpgsqlParameter($"pos{i}", (object?)pos ?? DBNull.Value));
+                parameters.Add(new Npgsql.NpgsqlParameter($"cid{i}", cache.Id));
+                parameters.Add(new Npgsql.NpgsqlParameter($"aid{i}", articleId));
+                parameters.Add(new Npgsql.NpgsqlParameter($"pos{i}", (object?)pos ?? DBNull.Value));
             }
 
-            sb.AppendLine(@"
-            ON CONFLICT (""ArticleCacheId"", ""ArticleId"") DO NOTHING;");
-
+            sb.AppendLine(@" ON CONFLICT (""ArticleCacheId"", ""ArticleId"") DO NOTHING;");
             await _db.Database.ExecuteSqlRawAsync(sb.ToString(), parameters.ToArray(), ct);
         }
 
         return cache;
     }
+
 
     // -----------------------------
     //  GetNextPageTokenForAsync(scopeKey, page)
@@ -168,33 +168,68 @@ public sealed class ArticleRepository : IArticleRepository
     //  DeleteExpiredCachesAsync(now)
     //  - TTL cleanup (CASCADE removes ArticleCacheItem links)
     // -----------------------------
-    public async Task<int> DeleteExpiredCachesAsync(DateTimeOffset now, CancellationToken ct = default)
+    public async Task<int> DeleteExpiredCachesAsync(CancellationToken ct = default)
     {
-        var sql = @"DELETE FROM ""ArticleCaches"" WHERE ""ExpiresAt"" < @now;";
-        var count = await _db.Database.ExecuteSqlRawAsync(
-            sql,
-            new NpgsqlParameter("now", now),
-            ct);
-        return count;
+        const string sql = @"DELETE FROM public.""ArticleCaches""
+                         WHERE ""ExpiresAt"" < now();";
+        return await _db.Database.ExecuteSqlRawAsync(sql, ct);
     }
-
+   
     // -----------------------------
     //  DeleteOrphanArticlesAsync(olderThan)
     //  - Remove Articles with no ArticleCacheItem references (with safety window)
     // -----------------------------
-    public async Task<int> DeleteOrphanArticlesAsync(DateTimeOffset olderThan, CancellationToken ct = default)
+    public async Task<int> DeleteOrphanArticlesAsync(TimeSpan safetyWindow, CancellationToken ct = default)
     {
-        var sql = @"
-        DELETE FROM ""Articles"" a
+        // Npgsql maps TimeSpan -> INTERVAL
+        return await _db.Database.ExecuteSqlInterpolatedAsync(
+            $@"
+        DELETE FROM public.""Articles"" a
         WHERE NOT EXISTS (
-            SELECT 1 FROM ""ArticleCacheItems"" i
+            SELECT 1 FROM public.""ArticleCacheItems"" i
             WHERE i.""ArticleId"" = a.""ArticleId""
         )
-        AND a.""InsertedAt"" < @olderThan;";
-        var count = await _db.Database.ExecuteSqlRawAsync(
-            sql,
-            new NpgsqlParameter("olderThan", olderThan),
-            ct);
-        return count;
+        AND a.""InsertedAt"" < (now() - {safetyWindow});", ct);
     }
+    // Count distinct articles across all cached pages for a scope
+    public async Task<int> CountDistinctForScopeAsync(string scopeKey, CancellationToken ct = default)
+    {
+        return await _db.ArticleCacheItems
+            .Where(i => i.ArticleCache.ScopeKey == scopeKey)
+            .Select(i => i.ArticleId)
+            .Distinct()
+            .CountAsync(ct);
+    }
+
+    // Flat feed: order by Page ASC, Position ASC, then PublishedTime DESC
+    public async Task<IReadOnlyList<(string ArticleId, DateTime Published, int Page, int? Position)>>
+        GetFlatFeedAsync(string scopeKey, int takeUpTo, CancellationToken ct = default)
+    {
+        var q =
+            from i in _db.ArticleCacheItems
+            where i.ArticleCache.ScopeKey == scopeKey
+            && i.ArticleCache.ExpiresAt > DateTimeOffset.UtcNow
+            join a in _db.Articles on i.ArticleId equals a.ArticleId
+            orderby i.ArticleCache.Page ascending, i.Position ascending, a.PublishedTime descending
+            select new { i.ArticleId, a.PublishedTime, i.ArticleCache.Page, i.Position };
+
+
+        return await q.Take(takeUpTo)
+            .Select(x => new ValueTuple<string, DateTime, int, int?>(x.ArticleId, x.PublishedTime, x.Page, x.Position))
+            .ToListAsync(ct);
+    }
+
+    // Load full rows for a batch of ids (preserve external order on caller)
+    public async Task<List<Article>> LoadArticlesByIdsAsync(IEnumerable<string> ids, CancellationToken ct = default)
+    {
+        var set = ids.ToHashSet(StringComparer.Ordinal);
+        return await _db.Articles
+            .Where(a => set.Contains(a.ArticleId))
+            .ToListAsync(ct);
+    }
+
+    public Task<bool> HasFreshPageAsync(string scopeKey, int page, DateTimeOffset now, CancellationToken ct = default)
+    => _db.ArticleCaches
+        .AnyAsync(c => c.ScopeKey == scopeKey && c.Page == page && c.ExpiresAt > now, ct);
+
 }

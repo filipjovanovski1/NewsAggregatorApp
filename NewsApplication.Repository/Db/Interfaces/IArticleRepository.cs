@@ -35,10 +35,19 @@ public interface IArticleRepository
     /// <summary>
     /// TTL cleanup: delete expired ArticleCache (CASCADE clears ArticleCacheItem).
     /// </summary>
-    Task<int> DeleteExpiredCachesAsync(DateTimeOffset now, CancellationToken ct = default);
+    Task<int> DeleteExpiredCachesAsync(CancellationToken ct = default);
 
     /// <summary>
     /// GC Articles no longer referenced by any ArticleCacheItem (with safety window).
     /// </summary>
-    Task<int> DeleteOrphanArticlesAsync(DateTimeOffset olderThan, CancellationToken ct = default);
+    /// 
+    Task<int> DeleteOrphanArticlesAsync(TimeSpan safetyWindow, CancellationToken ct = default);
+
+    Task<int> CountDistinctForScopeAsync(string scopeKey, CancellationToken ct = default);
+    Task<IReadOnlyList<(string ArticleId, DateTime Published, int Page, int? Position)>>
+        GetFlatFeedAsync(string scopeKey, int takeUpTo, CancellationToken ct = default);
+    Task<List<Article>> LoadArticlesByIdsAsync(IEnumerable<string> ids, CancellationToken ct = default);
+
+    Task<bool> HasFreshPageAsync(string scopeKey, int page, DateTimeOffset now, CancellationToken ct = default);
+
 }
