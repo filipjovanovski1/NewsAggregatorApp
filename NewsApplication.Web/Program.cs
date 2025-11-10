@@ -17,6 +17,15 @@ using Npgsql;
 
 var builder = WebApplication.CreateBuilder(args);
 
+builder.Services.AddCors(opts =>
+{
+    opts.AddPolicy("Client", p => p
+        .WithOrigins("http://localhost:5173", "https://localhost:5173")
+        .AllowAnyHeader()
+        .AllowAnyMethod()
+        .AllowCredentials());
+});
+
 var connStr = builder.Configuration.GetConnectionString("Default")!;
 
 // Build a data source with dynamic JSON enabled
@@ -60,9 +69,18 @@ builder.Services.AddHttpClient<INewsdataClient, NewsdataClient>((sp, http) =>
 
 builder.Services.AddScoped<IArticleIngestionService, ArticleIngestionService>();
 
-builder.Services.AddControllers();
+builder.Services.AddControllers(); 
+builder.Services.AddEndpointsApiExplorer();
+builder.Services.AddSwaggerGen();
 
 var app = builder.Build();
+
+if (app.Environment.IsDevelopment())
+{
+    app.UseSwagger();
+    app.UseSwaggerUI();
+}
+app.UseCors("Client");
 
 // dev: auto-apply migrations (keep your block)
 using (var scope = app.Services.CreateScope())
@@ -70,6 +88,19 @@ using (var scope = app.Services.CreateScope())
     var db = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
     db.Database.Migrate();
 }
+// add before app.Run();
+app.MapGet("/_routes", (IEnumerable<EndpointDataSource> sources) =>
+{
+    var routes = sources
+        .SelectMany(s => s.Endpoints)
+        .OfType<RouteEndpoint>()
+        .Select(e => new
+        {
+            Pattern = e.RoutePattern.RawText,
+            Display = e.DisplayName
+        });
+    return Results.Ok(routes);
+});
 
 app.MapControllers();
 app.Run();

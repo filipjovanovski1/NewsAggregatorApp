@@ -11,5 +11,6 @@ namespace NewsApplication.Service.Interfaces
     {
         Task<IReadOnlyList<GeoCandidateDTO>> SearchAsync(string query, int limit, CancellationToken ct);
         Task<GeoCandidateDTO?> GetByIdAsync(Guid id, CancellationToken ct);
+        Task<GeoCandidateDTO?> FindNearestAsync(double lat, double lng, double maxDistanceKm, CancellationToken ct);
     }
 }

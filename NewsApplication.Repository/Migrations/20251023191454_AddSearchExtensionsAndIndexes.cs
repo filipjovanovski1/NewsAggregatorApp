@@ -10,8 +10,24 @@ namespace NewsApplication.Repository.Migrations
         /// <inheritdoc />
         protected override void Up(MigrationBuilder migrationBuilder)
         {
-            migrationBuilder.Sql(@"CREATE EXTENSION IF NOT EXISTS unaccent;", suppressTransaction: true);
-            migrationBuilder.Sql(@"CREATE EXTENSION IF NOT EXISTS pg_trgm;", suppressTransaction: true);
+            migrationBuilder.Sql("""
+            DO $$
+            BEGIN
+                IF NOT EXISTS (SELECT 1 FROM pg_extension WHERE extname = 'unaccent') THEN
+                    CREATE EXTENSION unaccent;
+                END IF;
+            END$$;
+            """, suppressTransaction: true);
+
+            migrationBuilder.Sql("""
+            DO $$
+            BEGIN
+                IF NOT EXISTS (SELECT 1 FROM pg_extension WHERE extname = 'pg_trgm') THEN
+                    CREATE EXTENSION pg_trgm;
+                END IF;
+            END$$;
+            """, suppressTransaction: true);
+
             migrationBuilder.Sql("""
             CREATE OR REPLACE FUNCTION immutable_unaccent(text)
             RETURNS text

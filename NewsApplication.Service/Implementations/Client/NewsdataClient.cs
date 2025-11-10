@@ -10,6 +10,7 @@ using System.Net.Http;
 using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
+using Microsoft.Extensions.Logging;
 
 namespace NewsApplication.Service.Implementations.Client;
 
@@ -18,17 +19,31 @@ public sealed class NewsdataClient : INewsdataClient
     private readonly HttpClient _http;
     private readonly NewsdataOptions _opt;
     private const string ProviderName = "NEWSDATA";
-
-    public NewsdataClient(HttpClient http, IOptions<NewsdataOptions> opt)
+    private readonly ILogger<NewsdataClient> _logger;
+    public NewsdataClient(HttpClient http, IOptions<NewsdataOptions> opt, ILogger<NewsdataClient> logger)
     {
         _http = http;
         _opt = opt.Value;
+        _logger = logger;
+    }
+
+    private static string RedactKey(string url)
+    {
+        var i = url.IndexOf("apikey=", StringComparison.OrdinalIgnoreCase);
+        if (i < 0) return url;
+        var end = url.IndexOf('&', i);
+        return end < 0
+            ? url[..i] + "apikey=****"
+            : url[..i] + "apikey=****" + url[end..];
     }
 
     public async Task<(List<Article> articles, string? nextPageToken)> FetchPageAsync(
         string scopeKey, string? pageToken, int pageSize, CancellationToken ct)
     {
         var url = BuildUrl(scopeKey, pageToken, pageSize);
+
+        _logger.LogInformation("Newsdata GET {Url} (scopeKey={Scope})",
+        RedactKey(url), scopeKey);
 
         using var req = new HttpRequestMessage(HttpMethod.Get, url);
         using var resp = await _http.SendAsync(req, ct);

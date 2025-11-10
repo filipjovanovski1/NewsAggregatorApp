@@ -22,8 +22,8 @@ namespace NewsApplication.Repository.Db.Implementations
             co.""Iso2"" AS ""CountryIso2"",
             co.""Iso3"" AS ""CountryIso3"",
             co.""Name"",
-            NULL::double precision AS ""Latitude"",
-            NULL::double precision AS ""Longitude"",
+            co.""CentroidLat"" AS ""Latitude"",
+            co.""CentroidLng"" AS ""Longitude"",
             similarity(lower(unaccent(co.""Name"")), q.term) AS score
         FROM ""Countries"" co, q
         WHERE lower(unaccent(co.""Name"")) LIKE '%'||q.term||'%'
@@ -64,20 +64,65 @@ namespace NewsApplication.Repository.Db.Implementations
 
             var dto = await db.Countries
                 .AsNoTracking()
-                .Where(c => c.Iso2 == iso2)   // <-- use Iso2
-                .Select(c => new GeoCandidateDTO
+                 .Where(c => c.Iso2 == iso2)
+                .Select(c => new
                 {
-                    Id = c.Iso2.ToUpper(),
-                    Name = c.Name,
-                    CountryName = null,
-                    CountryIso2 = c.Iso2.ToUpper(),
-                    Lat = null,
-                    Lng = null,
-                    Score = 1.0
+                    c.Iso2,
+                    c.Iso3,
+                    c.Name,
+                    c.CentroidLat,
+                    c.CentroidLng
                 })
                 .FirstOrDefaultAsync(ct);
-            
-            return dto;
+            if (dto is null) return null;
+
+            return new GeoCandidateDTO
+            {
+                Id = dto.Iso2?.ToUpperInvariant() ?? "??",
+                Name = dto.Name,
+                CountryName = null,
+                CountryIso2 = dto.Iso2?.ToUpperInvariant(),
+                CountryIso3 = dto.Iso3?.ToUpperInvariant(),
+                Lat = dto.CentroidLat,
+                Lng = dto.CentroidLng,
+                Score = 1.0
+            };
+        }
+        public async Task<IReadOnlyList<GeoCandidateDTO>> FindNearestAsync(double lat, double lng, int limit, CancellationToken ct)
+        {
+            var take = Math.Clamp(limit, 1, 50);
+
+            await using var db = await _factory.CreateDbContextAsync(ct);
+
+            var rows = await db.Countries
+                .AsNoTracking()
+                .Where(c => c.CentroidLat != null && c.CentroidLng != null)
+                .OrderBy(c =>
+                    ((c.CentroidLat!.Value - lat) * (c.CentroidLat!.Value - lat)) +
+                    ((c.CentroidLng!.Value - lng) * (c.CentroidLng!.Value - lng)))
+                .Select(c => new
+                {
+                    c.Iso2,
+                    c.Iso3,
+                    c.Name,
+                    c.CentroidLat,
+                    c.CentroidLng
+                })
+                .Take(take)
+                .ToListAsync(ct);
+
+            return rows
+                .Select(r => new GeoCandidateDTO
+                {
+                    Id = r.Iso2?.ToUpperInvariant() ?? "??",
+                    Name = r.Name,
+                    CountryName = null,
+                    CountryIso2 = r.Iso2?.ToUpperInvariant(),
+                    CountryIso3 = r.Iso3?.ToUpperInvariant(),
+                    Lat = r.CentroidLat,
+                    Lng = r.CentroidLng,
+                    Score = 1.0
+                }).ToList();
         }
     }
 }

@@ -11,5 +11,6 @@ namespace NewsApplication.Repository.Db.Interfaces
     {
         Task<IReadOnlyList<GeoCandidateDTO>> SearchAsync(string normalizedToken, int limit, CancellationToken ct);
         Task<GeoCandidateDTO?> GetByIdAsync(string iso2, CancellationToken ct);
+        Task<IReadOnlyList<GeoCandidateDTO>> FindNearestAsync(double lat, double lng, int limit, CancellationToken ct);
     }
 }

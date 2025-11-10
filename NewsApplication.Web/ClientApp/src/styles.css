@@ -1,13 +1,18 @@
 ﻿:root {
+    /* Theme */
     --bg: #0b0d12;
-    --panel: #10131a;
-    --card: #161a22;
-    --text: #e9edf5;
-    --muted: #a8b0bf;
+    --panel: #fff4e6; /* cream panels/inputs */
+    --card: #ffffff; /* white cards/buttons */
+    --text: #0b0d12; /* dark text */
+    --muted: #5b5f69;
     --accent: #5ca0ff;
-    --border: #232a36;
+    --border: #E4D5C4;
     --max-globe: 98%;
-  --right-controls-width: 0px; 
+    --right-controls-width: 0px;
+    /* Searchbar layout */
+    --bar-gap: 0.5vh; /* distance from top */
+    --bar-pad-y: 4px; /* vertical padding inside the bar */
+    --control-h: 42px; /* input & button height */
 }
 
 html, body, #root {
@@ -19,62 +24,210 @@ body {
     background: radial-gradient(1200px 800px at 50% 0%, #0f1320, #07090d);
     color: var(--text);
     font-family: system-ui, -apple-system, Segoe UI, Roboto, Inter, Arial, sans-serif;
+    padding-top: 0;
 }
 
 .app {
     min-height: 100%;
 }
 
-/* -------------------------------------------------------
-   DEFAULT (sticky) SEARCHBAR – used outside the header
-------------------------------------------------------- */
+/* ================================
+   FIXED SEARCHBAR
+================================ */
 .searchbar {
-    position: sticky;
-    top: 0;
-    z-index: 20;
+    position: fixed;
+    top: var(--bar-gap);
+    left: 0;
+    right: 0;
+    z-index: 2000;
+    padding: var(--bar-pad-y) 16px 0 16px;
     background: linear-gradient(180deg, rgba(7,9,13,.9), rgba(7,9,13,.6) 80%, transparent);
-    padding: 12px 16px 0 16px;
     backdrop-filter: blur(6px);
+    overscroll-behavior: contain;
 }
 
-    .searchbar form {
+    .searchbar .searchbar__form {
         display: flex;
         gap: 8px;
-        max-width: 720px;
-        margin: 0 auto;
     }
 
-    .searchbar input {
-        flex: 1;
-        padding: 10px 12px;
-        border-radius: 10px;
-        border: 1px solid var(--border);
-        background: var(--panel);
-        color: var(--text);
+/* Field anchors both input and dropdown widths */
+.searchbar__field {
+    position: relative;
+    flex: 1 1 720px;
+    min-width: 320px;
+}
+
+/* Input (cream) — exact same height as the button */
+.searchbar input[type="search"] {
+    width: 100%;
+    height: var(--control-h);
+    line-height: var(--control-h);
+    padding: 0 12px; /* 0 vertical padding → exact height */
+    border-radius: 10px;
+    border: 1px solid var(--border);
+    background: var(--panel);
+    color: var(--text);
+    outline: none;
+}
+
+/* Remove native browser clear “x” */
+.searchbar input::-webkit-search-cancel-button {
+    -webkit-appearance: none;
+    height: 0;
+    width: 0;
+    margin: 0;
+}
+
+.searchbar input::-ms-clear {
+    display: none;
+    width: 0;
+    height: 0;
+}
+
+/* Hide any custom clear pill if present */
+.searchbar__clear {
+    display: none !important;
+}
+
+/* Submit button (white; grows text slightly on hover) */
+.searchbar__submit {
+    height: var(--control-h);
+    min-width: 104px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    padding: 0 14px;
+    border-radius: 10px;
+    border: 1px solid var(--border);
+    background: #fff;
+    color: #0b0d12;
+    cursor: pointer;
+    font-size: 0.95rem;
+    font-weight: 600;
+    transition: font-size .12s ease, font-weight .12s ease, border-color .12s ease, background .12s ease;
+}
+
+    .searchbar__submit:hover {
+        background: #fff;
+        border-color: var(--border); /* no blue outline */
+        font-size: 1.05rem;
+        font-weight: 700;
+    }
+
+    .searchbar__submit:disabled {
+        opacity: 1;
+        cursor: default;
+    }
+
+    .searchbar__submit:focus,
+    .searchbar__submit:focus-visible {
         outline: none;
+        box-shadow: none;
+        border-color: var(--border);
     }
 
-    .searchbar button {
-        padding: 10px 14px;
-        border-radius: 10px;
-        border: 1px solid var(--border);
-        background: var(--card);
-        color: var(--text);
-        cursor: pointer;
+/* Status text (keep if you need it) */
+.searchbar__status {
+    margin: 8px auto 0 auto;
+    max-width: 720px;
+    font-size: 0.8rem;
+    color: var(--muted);
+}
+
+/* Dropdown — kiss the input (no visible gap) */
+.searchbar__panel {
+    position: absolute;
+    top: calc(100% - 1px); /* overlap input border by 1px */
+    left: 0;
+    right: 0;
+    z-index: 1000;
+    background: #f6e6c8;
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    box-shadow: 0 10px 30px rgba(0,0,0,.25);
+    max-height: 320px;
+    overflow-y: auto;
+    padding: 6px;
+}
+
+/* Groups + rows */
+.searchbar__group {
+    padding: .5rem 0;
+}
+
+    .searchbar__group + .searchbar__group {
+        border-top: 1px solid rgba(0,0,0,.08);
     }
 
-        .searchbar button:hover {
-            border-color: var(--accent);
-        }
+.searchbar__group-title {
+    padding: .25rem .5rem;
+    font-size: .75rem;
+    letter-spacing: .04em;
+    text-transform: uppercase;
+    color: #000; /* black & bold */
+    font-weight: 700;
+}
 
-/* -------------------------------------------------------
-   HEADER ROW: Search + “What’s New” on ONE LINE
-------------------------------------------------------- */
-.topbar {
-    padding: 8px 16px;
-    height: var(--searchbar-h, 64px);
+.searchbar__list {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+}
+
+.searchbar__row {
+    width: 100%;
     display: flex;
     align-items: center;
+    justify-content: space-between;
+    gap: .75rem;
+    padding: .5rem .75rem;
+    background: rgba(255,255,255,.12);
+    border: 0;
+    text-align: left;
+    cursor: pointer;
+    border-radius: 12px;
+    transition: background .12s ease, transform .06s ease;
+}
+
+    .searchbar__row:hover,
+    .searchbar__row.is-active {
+        background: rgba(0,0,0,.20);
+    }
+
+.searchbar__row-col {
+    display: flex;
+    flex-direction: column;
+}
+
+.searchbar__row-main {
+    font-size: .95rem;
+    color: #ffffff;
+}
+
+.searchbar__row-sub {
+    font-size: .8rem;
+    color: #ffffff;
+}
+
+.searchbar__chip {
+    color: #ffffff;
+    font-size: .75rem;
+    line-height: 1;
+    padding: .25rem .5rem;
+    border-radius: 999px;
+    border: 1px solid rgba(255,255,255,.5);
+    background: transparent;
+}
+
+/* =================================
+   OPTIONAL HEADER ROW (minimal)
+================================= */
+.topbar {
+    padding: 8px 16px;
+    display: flex;
+    align-items: center;
+    overflow: visible;
 }
 
 .search-with-button {
@@ -82,17 +235,15 @@ body {
     align-items: center;
     gap: 12px;
     width: 100%;
-    flex-wrap: nowrap; /* prevent wrapping */
+    flex-wrap: nowrap;
 }
 
 .search-wrap {
     flex: 1 1 auto;
-    min-width: 0; /* allow shrink */
+    min-width: 0;
     padding-left: clamp(0px, var(--right-controls-width), 25vw);
 }
 
-/* Override sticky/full-width behavior ONLY inside header,
-   and for the explicit inline variant from SearchBar */
 .topbar .searchbar,
 .searchbar.searchbar--inline {
     position: static !important;
@@ -103,66 +254,26 @@ body {
     margin: 0 !important;
 }
 
-    .topbar .searchbar form,
-    .searchbar.searchbar--inline form {
+    .topbar .searchbar__form,
+    .searchbar.searchbar--inline .searchbar__form {
         display: flex !important;
         align-items: center;
         gap: 8px;
         width: 100% !important;
-        max-width: none !important; /* remove 720px clamp */
-        margin: 0 !important; /* remove auto-centering */
+        max-width: none !important;
+        margin: 0 !important;
     }
 
-    .searchbar.searchbar--inline input[type="search"],
-    .searchbar.searchbar--inline input[type="text"],
-    .searchbar.searchbar--inline .input {
-        flex: 1 1 auto;
-        min-width: 0;
-    }
-
-/* “What’s New” button (light blue, flush right) */
-.whats-new-btn {
-    margin-left: auto; /* push to far right */
-    flex: 0 0 auto;
-    display: inline-flex;
-    align-items: center;
-    gap: 8px;
-    padding: 10px 14px;
-    border-radius: 999px;
-    background: #cfe9ff;
-    color: #0b3a63;
-    border: 1px solid #a9d3ff;
-    font-weight: 600;
-    white-space: nowrap;
-    cursor: pointer;
-    box-shadow: 0 2px 6px rgba(0,0,0,.08);
-    transition: background .12s ease, transform .06s ease, box-shadow .12s ease;
-}
-
-    .whats-new-btn:hover {
-        background: #b7ddff;
-    }
-
-    .whats-new-btn:active {
-        transform: translateY(1px);
-    }
-
-    .whats-new-btn:focus-visible {
-        outline: 3px solid rgba(82,172,255,.65);
-        outline-offset: 2px;
-        box-shadow: 0 0 0 4px rgba(82,172,255,.25);
-    }
-
-    .whats-new-btn .icon-globe {
-        display: block;
-    }
-
-/* ------------------------------------------------------- */
+/* =================================
+   STAGE / GLOBE AREA
+   (subtract the fixed bar height → NO GAP)
+================================= */
 .stage {
     display: grid;
     place-items: center;
     width: 100vw;
-    height: calc(100vh - var(--searchbar-h));
+    /* Subtract the same amount here → no black strip */
+    height: calc(100vh - (var(--bar-gap) + var(--bar-pad-y) + var(--control-h)));
     padding: var(--stage-pad);
     box-sizing: border-box;
     overflow: hidden;
@@ -177,6 +288,7 @@ body {
     overflow: visible;
 }
 
+/* ================================= */
 .overlay {
     position: fixed;
     inset: 0;
@@ -230,7 +342,7 @@ body {
         cursor: pointer;
     }
 
-/* ---- Inline carousel arrows + grid ---- */
+/* Inline carousel & grid */
 .overlay-header-right {
     margin-left: auto;
     display: flex;
@@ -238,16 +350,14 @@ body {
     gap: 10px;
 }
 
-/* wrapper: [left arrow] [grid] [right arrow] */
 .grid3x-wrap {
     display: grid;
-    grid-template-columns: 44px 1fr 44px; /* fixed arrow columns */
+    grid-template-columns: 44px 1fr 44px;
     align-items: center;
     gap: 8px;
     padding: 12px 8px;
 }
 
-/* main grid (no side padding so arrows hug columns) */
 .grid3x {
     padding: 16px 0;
     display: grid;
@@ -271,9 +381,7 @@ body {
     }
 }
 
-/* arrows aligned with grid */
-.arrow-side,
-.arrow-side-spacer {
+.arrow-side, .arrow-side-spacer {
     width: 40px;
     height: 40px;
 }
@@ -364,3 +472,36 @@ body {
         grid-template-columns: repeat(2, minmax(0, 1fr));
     }
 }
+/* default (not hovered) text is dark */
+.searchbar__row-main {
+    color: var(--text);
+}
+
+.searchbar__row-sub {
+    color: var(--text);
+}
+
+/* chip default: dark text + dark outline */
+.searchbar__chip {
+    color: var(--text);
+    border: 1px solid rgba(0,0,0,.6);
+    background: transparent;
+}
+
+/* on hover/active: invert to white */
+.searchbar__row:hover,
+.searchbar__row.is-active {
+    background: rgba(0,0,0,.20);
+}
+
+    /* ensure children flip to white when parent row is hovered/active */
+    .searchbar__row:hover .searchbar__row-main,
+    .searchbar__row.is-active .searchbar__row-main,
+    .searchbar__row:hover .searchbar__row-sub,
+    .searchbar__row.is-active .searchbar__row-sub,
+    .searchbar__row:hover .searchbar__chip,
+    .searchbar__row.is-active .searchbar__chip {
+        color: #ffffff;
+        border-color: rgba(255,255,255,.8);
+    }
+

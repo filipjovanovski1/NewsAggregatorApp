@@ -28,6 +28,12 @@ namespace NewsApplication.Service.Implementations
 
         public Task<GeoCandidateDTO?> GetByIdAsync(string iso2, CancellationToken ct)
             => _repo.GetByIdAsync(iso2, ct);
+        public async Task<GeoCandidateDTO?> FindNearestAsync(double lat, double lng, CancellationToken ct)
+        {
+            var candidates = await _repo.FindNearestAsync(lat, lng, limit: 8, ct);
+            return candidates.FirstOrDefault();
+        }
+
 
     }
 }

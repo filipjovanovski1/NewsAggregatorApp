@@ -12,12 +12,21 @@ export default defineConfig({
     server: {
         port: 5173,
         proxy: {
-            '/api':
-            {
-                target: 'https://localhost:7146', // match your backend dev port
+            '/scope': {
+                target: 'https://localhost:7146',
                 changeOrigin: true,
-                secure: false, 
-            } 
+                secure: false,
+            }, 
+            '/articles': {
+                target: 'https://localhost:7146',
+                changeOrigin: true,
+                secure: false,
+            },
+            '/search': {
+                target: 'https://localhost:7146',
+                changeOrigin: true,
+                secure: false,
+            }
         }
     },
     build: {

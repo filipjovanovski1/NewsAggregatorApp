@@ -51,6 +51,8 @@ namespace NewsApplication.Domain.DTOs.Scopes
 
         public bool IsAmbiguous { get; init; }
 
+        public string? OutlineIso2 { get; set; }
+
         public bool IsBlocking =>
             Kind switch
             {

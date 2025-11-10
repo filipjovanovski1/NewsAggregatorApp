@@ -50,65 +50,6 @@ public sealed class DevController : ControllerBase
         }
     }
 
-    [HttpGet("search/city")]
-    public async Task<IActionResult> SearchCity(
-        [FromQuery] string q,
-        [FromServices] ICityReadService svc,
-        CancellationToken ct)
-        => Ok(await svc.SearchAsync(q, 10, ct));  // uses tokenizer-normalized search in service :contentReference[oaicite:0]{index=0}
-
-    [HttpGet("search/country")]
-    public async Task<IActionResult> SearchCountry(
-        [FromQuery] string q,
-        [FromServices] ICountryReadService svc,
-        CancellationToken ct)
-        => Ok(await svc.SearchAsync(q, 10, ct));  // ditto; ISO/name boosting is in resolver/policy layer :contentReference[oaicite:1]{index=1}
-
-    [HttpGet("preview")]
-    public async Task<IActionResult> Preview(
-        [FromQuery] string q,
-        [FromServices] IScopeResolverService svc,
-        CancellationToken ct)
-        => Ok(await svc.PreviewAsync(q, ct));  // scope kind & ambiguity logic lives in resolver/policy 
-
-    [HttpPost("cache/fetch")]
-    public async Task<IActionResult> FetchCachePage(
-        [FromQuery] string scopeKey,
-        [FromQuery] int page,
-        [FromQuery] int pageSize,
-        [FromServices] IArticleIngestionService ingest,
-        CancellationToken ct)
-    {
-        // GetOrFetch respects TTL via HasFreshPageAsync -> no provider call if fresh
-        var cache = await ingest.GetOrFetchPageAsync(scopeKey, page, pageSize, ct);  // 10-minute TTL set on fetch :contentReference[oaicite:3]{index=3}
-        return Ok(new { cache.Id, cache.ScopeKey, cache.Page, cache.NextPageToken, cache.ExpiresAt });
-    }
-
-    [HttpGet("cache/page")]
-    public async Task<IActionResult> GetCachePage(
-        [FromQuery] string scopeKey,
-        [FromQuery] int page,
-        [FromServices] IArticleRepository repo,
-        CancellationToken ct)
-    {
-        var cache = await repo.GetPageAsync(scopeKey, page, ct);  // includes Items -> Article via Include :contentReference[oaicite:4]{index=4}
-        if (cache is null) return NotFound();
-
-        var dto = new ArticleCachePageDTO(
-            cache.Id, cache.ScopeKey, cache.Page, cache.NextPageToken, cache.ExpiresAt,
-            cache.Items
-                .OrderBy(i => i.Position ?? int.MaxValue)
-                .Select(i => new ArticleCacheItemDTO(
-                    i.ArticleId, i.Position,
-                    new ArticleDTO(
-                        i.Article.ArticleId, i.Article.Provider, i.Article.Title, i.Article.Description,
-                        i.Article.ImageUrl, i.Article.Publisher, i.Article.Url, i.Article.PublishedTime,
-                        i.Article.Categories)))
-                .ToList());
-
-        return Ok(dto); // DTO shapes: ArticleCachePageDTO/ItemDTO/ArticleDTO 
-    }
-
     [HttpPost("cache/cleanup")]
     public async Task<IActionResult> CleanupCache(
         [FromServices] IArticleRepository repo,
@@ -154,7 +95,5 @@ public sealed class DevController : ControllerBase
         return Ok(new { serverNow, appUtcNow, skewMinutes = (serverNow - appUtcNow).TotalMinutes, expiredByServer, expiredByApp, minExpiresAt = minExp, maxExpiresAt = maxExp });
     }
 
-    public sealed record ScalarInt(int Value);
-    public sealed record ScalarTimestamp(DateTimeOffset? Value);
-    public sealed record DbInfo(string Db, string Usr, string Host, int Port, string Schema, string Path);
+  
 }

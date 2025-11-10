@@ -15,6 +15,42 @@ public sealed class ArticleIngestionService : IArticleIngestionService
     private readonly INewsdataClient _client;
     private readonly IArticleRepository _repo;
 
+    private static (string providerScopeKey, string? keywords) SplitKw(string scopeKey)
+    {
+        const string tag = "|kw:";
+        var idx = scopeKey.IndexOf(tag, StringComparison.Ordinal);
+        if (idx < 0) return (scopeKey, null);
+
+        var baseKey = scopeKey.Substring(0, idx);
+        var enc = scopeKey.Substring(idx + tag.Length);
+        var kw = Uri.UnescapeDataString(enc);
+        return (baseKey, string.IsNullOrWhiteSpace(kw) ? null : kw);
+    }
+
+    private static bool MatchesKeywords(NewsApplication.Domain.DomainModels.Article a, string keywords)
+    {
+        if (string.IsNullOrWhiteSpace(keywords)) return true;
+        var terms = keywords.Split(' ', StringSplitOptions.RemoveEmptyEntries)
+                            .Select(t => t.Trim().ToLowerInvariant())
+                            .ToArray();
+        if (terms.Length == 0) return true;
+
+        string s(string? v) => (v ?? string.Empty).ToLowerInvariant();
+
+        var hayTitle = s(a.Title);
+        var hayDesc = s(a.Description);
+        var hayPub = s(a.Publisher);
+        var hayCats = string.Join(' ', (a.Categories ?? new List<string>()).Select(c => c.ToLowerInvariant()));
+
+        // match if ALL terms appear in any of the fields (title/desc/publisher/categories)
+        foreach (var t in terms)
+        {
+            if (!(hayTitle.Contains(t) || hayDesc.Contains(t) || hayPub.Contains(t) || hayCats.Contains(t)))
+                return false;
+        }
+        return true;
+    }
+
     public ArticleIngestionService(INewsdataClient client, IArticleRepository repo)
     {
         _client = client;
@@ -34,15 +70,43 @@ public sealed class ArticleIngestionService : IArticleIngestionService
         return await FetchAndCachePageAsync(scopeKey, page, pageSize, ct);
     }
 
+    // ArticleIngestionService.cs
+    private static string MergeKwIntoProviderScope(string providerScopeKey, string? keywords)
+    {
+        if (string.IsNullOrWhiteSpace(keywords)) return providerScopeKey;
+
+        // If there's already a q:, append the keywords to it; otherwise add q:
+        var parts = providerScopeKey.Split('|', StringSplitOptions.RemoveEmptyEntries).ToList();
+        var qIndex = parts.FindIndex(p => p.StartsWith("q:", StringComparison.OrdinalIgnoreCase));
+
+        if (qIndex >= 0)
+        {
+            var existing = parts[qIndex].Substring(2);
+            var merged = string.IsNullOrWhiteSpace(existing) ? keywords : $"{existing} {keywords}";
+            parts[qIndex] = "q:" + merged.Trim();
+        }
+        else
+        {
+            parts.Add("q:" + keywords.Trim());
+        }
+
+        return string.Join('|', parts);
+    }
 
 
     public async Task<ArticleCache> FetchAndCachePageAsync(
      string scopeKey, int page, int pageSize, CancellationToken ct)
     {
+        var (providerScopeKey, keywords) = SplitKw(scopeKey);
+
         var prevToken = await _repo.GetNextPageTokenForAsync(scopeKey, page, ct);
 
-        var (articles, nextToken) = await _client.FetchPageAsync(scopeKey, prevToken, pageSize, ct);
+        var providerForClient = MergeKwIntoProviderScope(providerScopeKey, keywords);
 
+        var (articles, nextToken) = await _client.FetchPageAsync(providerForClient, prevToken, pageSize, ct);
+
+        if (!string.IsNullOrWhiteSpace(keywords))
+            articles = articles.Where(a => MatchesKeywords(a, keywords!)).ToList();
         // --- Intra-page exact dedupe by (Title, Description) ---
         static string NormDesc(string? d) => d is null ? "\x01" : d; // sentinel only for keying equality
         var byKey = new Dictionary<(string Title, string DescKey), Domain.DomainModels.Article>();

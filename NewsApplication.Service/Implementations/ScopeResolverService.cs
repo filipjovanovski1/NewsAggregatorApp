@@ -35,6 +35,7 @@ namespace NewsApplication.Service.Implementations
         private const double CountryThreshold = 0.6; // or exact ISO hit
         private const double CityThreshold = 0.6;
         private const int MaxCompositeTargets = 12; // reasonable cap for map pins
+        private const double ExactFloor = 0.999;
 
         public ScopeResolverService(
             IQueryTokenizer tokenizer,
@@ -61,6 +62,7 @@ namespace NewsApplication.Service.Implementations
                     OriginalQuery = query,
                     Kind = ScopeKind.Other,
                     IsAmbiguous = false,
+                    OutlineIso2 = null,
                     NonGeoKeywords = new List<string>(),
                     CountryMatches = new List<GeoCandidateDTO>(),
                     CityMatches = new List<GeoCandidateDTO>(),
@@ -393,14 +395,92 @@ namespace NewsApplication.Service.Implementations
 
             // 5) Project to DTOs after ordering
             var cityMatches = orderedCityRows.Select(h => h.Dto).ToList();
-        
+
+            /* ---- NEW: Composite detection: exact same city name across multiple countries ----
+    If we have >=2 "exact" (~1.0) city hits in >=2 different ISO2 countries,
+    we treat this as Composite + Ambiguous, do NOT pick one country,
+    and we provide cross-country pins in targets. */
+            const double exactFloor = 0.999;
+               // decide kind + ambiguity
+            var kind = _policy.DecideKind(countryMatches, cityMatches);
+            var ambiguous = _policy.IsAmbiguous(countryMatches, cityMatches, nonGeo);
+
+            var targets = new List<GeoCandidateDTO>();
+            var exactExAcross = cityMatches
+                .Where(c => c.Score >= exactFloor && !string.IsNullOrWhiteSpace(c.CountryIso2))
+                .ToList();
+
+            var distinctIsoForExacts = exactExAcross
+                .Select(c => c.CountryIso2!.ToUpperInvariant())
+                .Distinct()
+                .Count();
+
+            var hasChosenCountry = !string.IsNullOrWhiteSpace(chosenIso2ForTargets);
+
+            bool forcedComposite = false;
+            if (distinctIsoForExacts >= 2)
+            {
+                if (!hasChosenCountry)
+                {
+                    // true cross-country ambiguity → composite pins, no outline
+                    forcedComposite = true;
+                    kind = ScopeKind.Composite;
+                    ambiguous = true;
+
+                    chosenIso2ForTargets = null;
+
+                    targets = exactExAcross
+                        .GroupBy(c => c.Id)
+                        .Select(g => g.First())
+                        .OrderByDescending(c => c.Score)
+                        .ThenBy(c => c.Name)
+                        .Take(MaxCompositeTargets)
+                        .ToList();
+
+                    traceLines.Add($"forcedComposite.exactsAcrossCountries={targets.Count}");
+                }
+                else
+                {
+                    // User/query/policy pointed to a country → stay in that country
+                    var iso = chosenIso2ForTargets!;
+                    var filtered = cityMatches
+                        .Where(c => string.Equals(c.CountryIso2, iso, StringComparison.OrdinalIgnoreCase))
+                        .ToList();
+
+                    // If the in-country set is effectively one city (Paris, FR), treat as non-ambiguous City.
+                    // If somehow there are multiple rows/ids with same name, mark CityInCountry + ambiguous.
+                    var distinctCityIds = filtered.Select(c => c.Id).Distinct(StringComparer.Ordinal).Count();
+
+                    cityMatches = filtered;
+                    targets = new List<GeoCandidateDTO>(); // let later branches decide pins if needed
+
+                    if (distinctCityIds <= 1)
+                    {
+                        kind = ScopeKind.City;
+                        ambiguous = false;
+                        traceLines.Add($"composite-downgraded:singleCountry.singleCity iso={iso}");
+                    }
+                    else
+                    {
+                        kind = ScopeKind.CityInCountry;
+                        ambiguous = true;
+                        traceLines.Add($"composite-downgraded:singleCountry.ambiguous iso={iso}");
+                    }
+                }
+            }
+
 
             // 6) If the "chosen" country actually has no cities, drop it so it won't affect targeting
-            if (!string.IsNullOrWhiteSpace(chosenIso2ForTargets) &&
-                !cityMatches.Any(c => string.Equals(c.CountryIso2, chosenIso2ForTargets, StringComparison.OrdinalIgnoreCase)))
+            if (!forcedComposite)
             {
-                chosenIso2ForTargets = null;
+                if (!string.IsNullOrWhiteSpace(chosenIso2ForTargets) &&
+                    !cityMatches.Any(c =>
+                        string.Equals(c.CountryIso2, chosenIso2ForTargets, StringComparison.OrdinalIgnoreCase)))
+                {
+                    chosenIso2ForTargets = null;
+                }
             }
+
 
             // Build Dictionary<string, List<GeoCandidateDTO>> (not IReadOnly*)
             var citiesByCountry = cityMatches
@@ -409,25 +489,22 @@ namespace NewsApplication.Service.Implementations
                 .ToDictionary(g => g.Key, g => g.ToList(), StringComparer.OrdinalIgnoreCase);
 
 
-            // decide kind + ambiguity
-            var kind = _policy.DecideKind(countryMatches, cityMatches);
-            var ambiguous = _policy.IsAmbiguous(countryMatches, cityMatches, nonGeo);
 
-            var targets = new List<GeoCandidateDTO>();
 
-            if (!ambiguous && kind == ScopeKind.City &&
-            cityMatches.GroupBy(c => c.CountryIso2).Count() == 1 &&
-            cityMatches.GroupBy(c => c.Id).Count() > 1)
+            // ---- Branch by kind & ambiguity (skip everything if we forced composite above) ----
+            if (!forcedComposite && !ambiguous && kind == ScopeKind.City &&
+                cityMatches.GroupBy(c => c.CountryIso2).Count() == 1 &&
+                cityMatches.GroupBy(c => c.Id).Count() > 1)
             {
+                // same-country duplicates => CityInCountry + ambiguous
                 kind = ScopeKind.CityInCountry;
-                ambiguous = true; // force ambiguity within that country
+                ambiguous = true;
                 traceLines.Add("ambiguous.singleCountryMultipleCities=true");
             }
 
-            if (ambiguous && kind == ScopeKind.Composite)
+            if (!forcedComposite && ambiguous && kind == ScopeKind.Composite)
             {
                 // 1) First: include ALL exact matches (score ≈ 1) across countries
-                const double exactFloor = 0.999; // tolerate float jitter
                 var exactsAcross = cityMatches
                     .Where(c => c.Score >= exactFloor)
                     .GroupBy(c => c.Id)
@@ -443,7 +520,7 @@ namespace NewsApplication.Service.Implementations
                 }
                 else
                 {
-                    // 2) Fallback: your existing "strong city pins" logic
+                    // 2) Fallback: strong city pins
                     var compositeCityTargets = cityMatches
                         .Where(c => c.Score >= CityThreshold)
                         .GroupBy(c => c.Id)
@@ -460,7 +537,7 @@ namespace NewsApplication.Service.Implementations
                     }
                 }
 
-                // 3) Last-resort: if still nothing, show country pins (centroids) when you have multiple countries
+                // 3) Last-resort: country centroids if multiple countries available
                 if (targets.Count == 0 && countryMatches.Count >= 2)
                 {
                     var compositeCountryTargets = countryMatches
@@ -484,78 +561,44 @@ namespace NewsApplication.Service.Implementations
                         traceLines.Add($"targets.composite.countries={compositeCountryTargets.Count}");
                     }
                 }
-
-                // (Do not run the old Composite block elsewhere; this replaces it.)
             }
-
-            // Branch by kind & ambiguity
-            else if (kind == ScopeKind.CityInCountry && ambiguous && !string.IsNullOrWhiteSpace(chosenIso2ForTargets))
+            else if (!forcedComposite && kind == ScopeKind.CityInCountry && ambiguous &&
+                     !string.IsNullOrWhiteSpace(chosenIso2ForTargets))
             {
+                // In-country ambiguous cities → pins (prefer exacts)
                 var inCountry = cityMatches
                     .Where(c => string.Equals(c.CountryIso2, chosenIso2ForTargets, StringComparison.OrdinalIgnoreCase))
                     .ToList();
 
-                // 1) Include ALL exact matches first (score ~ 1.0)
-                const double exactFloor = 0.999; // tolerate tiny float drift
                 var exact = inCountry
                     .Where(c => c.Score >= exactFloor)
                     .GroupBy(c => c.Id)
                     .Select(g => g.First())
-                    .OrderByDescending(c => c.Score)  // stable
+                    .OrderByDescending(c => c.Score)
                     .ThenBy(c => c.Name)
                     .ToList();
 
                 if (exact.Count > 0)
                 {
-                    // Cap if you have a UI limit
                     targets.AddRange(exact.Take(MaxCompositeTargets));
                     traceLines.Add($"targets.cityincountry.exacts={exact.Count} iso={chosenIso2ForTargets}");
                 }
                 else
                 {
-                    // 2) Fallback – pick one of your existing strategies:
-
-                    // (a) ALL in-country cities:
                     var allInCountry = inCountry
                         .GroupBy(c => c.Id)
                         .Select(g => g.First())
                         .OrderByDescending(c => c.Score)
                         .ThenBy(c => c.Name)
                         .ToList();
+
                     targets.AddRange(allInCountry.Take(MaxCompositeTargets));
                     traceLines.Add($"targets.cityincountry.all={allInCountry.Count} iso={chosenIso2ForTargets}");
-
-                    // (b) Top-tied with "at least one" fail-safe:
-                    //var grouped = inCountry
-                    //    .GroupBy(c => c.Id)
-                    //    .Select(g => g.First())
-                    //    .ToList();
-
-                    //var top = grouped.Max(c => c.Score);
-                    //const double hi = 0.90;
-                    //const double eps = 0.01;
-                    //var threshold = (top >= hi) ? Math.Max(hi, top - eps) : top;
-
-                    //var tied = grouped
-                    //    .Where(c => c.Score >= threshold)
-                    //    .OrderByDescending(c => c.Score)
-                    //    .ThenBy(c => c.Name)
-                    //    .ToList();
-
-                    //if (tied.Count == 0)
-                    //    tied.Add(grouped.OrderByDescending(c => c.Score).First());
-
-                    //targets.AddRange(tied.Take(MaxCompositeTargets));
-                    //traceLines.Add($"targets.cityincountry.tied={tied.Count} threshold={threshold:F2} iso={chosenIso2ForTargets}");
                 }
             }
-
-            else if (!ambiguous)
+            else if (!forcedComposite && !ambiguous)
             {
-                // Non-ambiguous flows:
-                // – If we resolved to a single concrete city, return just that city
-                // – If you later allow unambiguous Composite, include its resolved set
-                // Reuse the order already established in cityMatches (which came from bigram-first → score → name)
+                // Non-ambiguous: single best city (with optional country bias)
                 GeoCandidateDTO? bestCity = string.IsNullOrWhiteSpace(chosenIso2ForTargets)
                     ? cityMatches.FirstOrDefault()
                     : cityMatches.FirstOrDefault(c =>
@@ -566,16 +609,18 @@ namespace NewsApplication.Service.Implementations
                 traceLines.Add(bestCity != null ? "targets.single=1" : "targets.single=0");
             }
             else
-                {
+            {
                 // Other ambiguous kinds → no pins
                 traceLines.Add("targets.suppressed:ambiguous");
             }
+
 
             return new ScopePreviewDTO
             {
                 OriginalQuery = query,                 // <— older DTO expects this
                 Kind = kind,
                 IsAmbiguous = ambiguous,
+                OutlineIso2 = forcedComposite ? null : chosenIso2ForTargets,
                 NonGeoKeywords = nonGeo,              // List<string>
                 CountryMatches = countryMatches,      // List<GeoCandidateDTO>
                 CityMatches = cityMatches,            // List<GeoCandidateDTO>
@@ -586,7 +631,7 @@ namespace NewsApplication.Service.Implementations
                 Diagnostics = new Dictionary<string, object?>
                 {
                     ["policyVersion"] = ScopePolicy.PolicyVersion,
-                    ["chosenIso2"] = chosenFromPolicy,
+                    ["chosenIso2"] = forcedComposite ? null : chosenFromPolicy,
                     ["targetIds"] = targets.Select(t => t.Id).ToList(),
                     ["topCountries"] = countryMatches
                     .Take(3)

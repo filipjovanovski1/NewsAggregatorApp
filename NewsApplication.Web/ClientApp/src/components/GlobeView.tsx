@@ -39,12 +39,15 @@ type GlobeApi = {
 interface Props {
     onPick: (lat: number, lng: number) => void;
     /** Called when a country polygon is clicked (ISO-2 provided). */
-    onPickCountry?: (iso2: string, iso3: string, lat: number, lng: number) => void;
+    onPickCountry?: (iso2: string, iso3: string | null, name: string | null, lat: number, lng: number) => void;
     focus?: { lat: number; lng: number; altitude?: number } | null;
     /** ISO-2 of country to outline (e.g. "FR"). Pass null/undefined to clear. */
     highlightIso2?: string | null;
     /** City marker coordinates; pass null/undefined to hide. */
     cityMarker?: { lat: number; lng: number } | null;
+    /** Array of city markers (takes precedence over cityMarker when provided). */
+    cityMarkers?: { lat: number; lng: number }[] | null;
+
 }
 
 export default function GlobeView({
@@ -52,7 +55,8 @@ export default function GlobeView({
     onPickCountry,
     focus,
     highlightIso2,
-    cityMarker
+    cityMarker,
+    cityMarkers,
 }: Props) {
     const globeRef = useRef<GlobeApi | null>(null);
     const wrapRef = useRef<HTMLDivElement>(null);
@@ -109,12 +113,28 @@ export default function GlobeView({
             cancelled = true;
         };
     }, []);
-
+   
     // Uppercase string value of a property, tolerant of unknowns
     function upOf(props: Record<string, unknown>, key: string): string {
         const v = props[key];
         if (v == null) return '';
         return typeof v === 'string' ? v.toUpperCase() : String(v).toUpperCase();
+    }
+
+    function strOf(props: Record<string, unknown> | undefined, key: string): string {
+        if (!props) return '';
+        const v = props[key];
+        if (v == null) return '';
+        return typeof v === 'string' ? v : String(v);
+    }
+
+    function firstString(props: Record<string, unknown> | undefined, keys: string[]): string {
+        if (!props) return '';
+        for (const k of keys) {
+            const raw = strOf(props, k).trim();
+            if (raw) return raw;
+        }
+        return '';
     }
 
     // Return the first non-empty uppercased value among keys
@@ -176,14 +196,24 @@ export default function GlobeView({
         setPolyData(matches);
     }, [highlightIso2, allFeatures, getIso]);
 
-    // City marker (single point)
+    // City markers: prefer array; fallback to single marker
     useEffect(() => {
+        if (Array.isArray(cityMarkers) && cityMarkers.length > 0) {
+            const good = cityMarkers.filter(
+                (m): m is { lat: number; lng: number } =>
+                    Number.isFinite(m?.lat) && Number.isFinite(m?.lng)
+            );
+            setPoints(good);
+            return;
+        }
+
         if (cityMarker && Number.isFinite(cityMarker.lat) && Number.isFinite(cityMarker.lng)) {
             setPoints([{ lat: cityMarker.lat, lng: cityMarker.lng }]);
         } else {
             setPoints([]);
         }
-    }, [cityMarker]);
+    }, [cityMarkers, cityMarker]);
+
 
     // Limit zoom / damping
     useEffect(() => {
@@ -248,16 +278,24 @@ export default function GlobeView({
                 /* Single-click anywhere → reverse lookup (keeps city picks working) */
                 onGlobeClick={({ lat, lng }: { lat: number; lng: number }) => onPick(lat, lng)}
                 /* Clicking a filled country polygon → send ISO-2; fall back to centroid */
-                onPolygonClick={(poly: Feature, _evt, extra?: { lat: number; lng: number }) => {
+                onPolygonClick={(poly: Feature, _evt: unknown, extra?: { lat: number; lng: number }) => {
                     const c = extra && Number.isFinite(extra.lat) && Number.isFinite(extra.lng)
                         ? { lat: extra.lat, lng: extra.lng }
                         : centroidFromFeature(poly);
 
                     const iso2 = getIso(poly?.properties);
                     const iso3 = getIso3(poly?.properties);
+                    const name = firstString(poly?.properties, [
+                        'NAME_EN',
+                        'NAME',
+                        'ADMIN',
+                        'SOVEREIGNT',
+                        'ADMIN_NAME'
+                    ]) || null;
+
 
                     if (iso2 && typeof onPickCountry === 'function') {
-                        onPickCountry(iso2, iso3, c.lat, c.lng);   // <-- now passing ISO-3 too
+                        onPickCountry(iso2, iso3, name, c.lat, c.lng);
                     } else {
                         onPick(c.lat, c.lng);
                     }

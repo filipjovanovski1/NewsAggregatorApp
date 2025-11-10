@@ -57,19 +57,70 @@ namespace NewsApplication.Repository.Db.Implementations
             var dto = await db.Cities
                 .AsNoTracking()
                 .Where(c => c.Id == id)
-                .Select(c => new GeoCandidateDTO
+                .Select(c => new
                 {
-                    Id = c.Id.ToString(),
-                    Name = c.Name,
-                    CountryName = c.CountryName,
-                    CountryIso2 = c.CountryIso2,
-                    Lat = c.Latitude,
-                    Lng = c.Longitude,
-                    Score = 1.0
+                    c.Id,
+                    c.Name,
+                    c.CountryName,
+                    c.CountryIso2,
+                    Iso3 = c.Country != null ? c.Country.Iso3 : null,
+                    c.Latitude,
+                    c.Longitude
                 })
                 .FirstOrDefaultAsync(ct);
 
-            return dto;
+            if (dto is null) return null;
+
+            return new GeoCandidateDTO
+            {
+                Id = dto.Id.ToString(),
+                Name = dto.Name,
+                CountryName = dto.CountryName,
+                CountryIso2 = dto.CountryIso2?.ToUpperInvariant(),
+                CountryIso3 = dto.Iso3?.ToUpperInvariant(),
+                Lat = dto.Latitude,
+                Lng = dto.Longitude,
+                Score = 1.0
+            };
+        }
+
+        public async Task<IReadOnlyList<GeoCandidateDTO>> FindNearestAsync(double lat, double lng, int limit, CancellationToken ct)
+        {
+            var take = Math.Clamp(limit, 1, 50);
+
+            await using var db = await _factory.CreateDbContextAsync(ct);
+
+            var rows = await db.Cities
+                .AsNoTracking()
+                .OrderBy(c =>
+                    ((c.Latitude - lat) * (c.Latitude - lat)) +
+                    ((c.Longitude - lng) * (c.Longitude - lng)))
+                .Select(c => new
+                {
+                    c.Id,
+                    c.Name,
+                    c.CountryName,
+                    c.CountryIso2,
+                    Iso3 = c.Country != null ? c.Country.Iso3 : null,
+                    c.Latitude,
+                    c.Longitude
+                })
+                .Take(take)
+                .ToListAsync(ct);
+
+            return rows
+                .Select(r => new GeoCandidateDTO
+                {
+                    Id = r.Id.ToString(),
+                    Name = r.Name,
+                    CountryName = r.CountryName,
+                    CountryIso2 = r.CountryIso2?.ToUpperInvariant(),
+                    CountryIso3 = r.Iso3?.ToUpperInvariant(),
+                    Lat = r.Latitude,
+                    Lng = r.Longitude,
+                    Score = 1.0
+                })
+                .ToList();
         }
     }
 }
