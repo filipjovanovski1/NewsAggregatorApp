@@ -44,10 +44,13 @@ public interface IArticleRepository
     Task<int> DeleteOrphanArticlesAsync(TimeSpan safetyWindow, CancellationToken ct = default);
 
     Task<int> CountDistinctForScopeAsync(string scopeKey, CancellationToken ct = default);
-    Task<IReadOnlyList<(string ArticleId, DateTime Published, int Page, int? Position)>>
+    Task<List<string?>> GetTitlesForScopeAsync(string scopeKey, CancellationToken ct = default);
+    Task<IReadOnlyList<(string ArticleId, string? Title, DateTime Published, int Page, int? Position)>>
         GetFlatFeedAsync(string scopeKey, int takeUpTo, CancellationToken ct = default);
+    Task<int> GetHighestCachedPageAsync(string scopeKey, CancellationToken ct = default);
     Task<List<Article>> LoadArticlesByIdsAsync(IEnumerable<string> ids, CancellationToken ct = default);
 
+    Task<bool> PruneDuplicateTitlesForCacheAsync(string scopeKey, int page, CancellationToken ct = default);
     Task<bool> HasFreshPageAsync(string scopeKey, int page, DateTimeOffset now, CancellationToken ct = default);
 
 }

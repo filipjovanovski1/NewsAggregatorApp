@@ -31,6 +31,14 @@ namespace NewsApplication.Service.Implementations
         int? BigramStartIndex,   // null if single-token hit; else i where bigram (i,i+1)
             bool FromBigram);
 
+        private sealed record CountryCandidate(
+            GeoCandidateDTO Dto,
+            bool FromContext,
+            bool IsIsoExactSingleToken,
+            bool IsNameExactSingleToken,
+            bool IsContextExact,
+            bool IsSingleTokenName);
+
         // thresholds from your spec
         private const double CountryThreshold = 0.6; // or exact ISO hit
         private const double CityThreshold = 0.6;
@@ -48,12 +56,43 @@ namespace NewsApplication.Service.Implementations
             _countries = countries;
             _policy = policy;
         }
+        private static string? ForceIso2FromTokens(IReadOnlyList<string> tokens)
+        {
+            if (tokens.Count == 0) return null;
 
+            static bool ContainsPhrase(IReadOnlyList<string> source, params string[] phrase)
+            {
+                if (phrase.Length == 0 || source.Count < phrase.Length) return false;
+
+                for (var i = 0; i <= source.Count - phrase.Length; i++)
+                {
+                    var matches = true;
+                    for (var j = 0; j < phrase.Length; j++)
+                    {
+                        if (!string.Equals(source[i + j], phrase[j], StringComparison.Ordinal))
+                        {
+                            matches = false;
+                            break;
+                        }
+                    }
+
+                    if (matches) return true;
+                }
+
+                return false;
+            }
+
+                if (ContainsPhrase(tokens, "united", "kingdom"))
+                {
+                    return "GB";
+                }
+
+            return null;
+        }
         public async Task<ScopePreviewDTO> PreviewAsync(string query, CancellationToken ct)
         {
             var raw = _tokenizer.Split(query);                               // ["San", "José", "CR", "sports"]
             var tokens = raw.Select(t => _tokenizer.Normalize(t)).ToList();  // ["san","jose","cr","sports"]
-
             if (tokens.Count == 0)
             {
                 // Return a minimal, valid preview object for the older DTO shape
@@ -71,9 +110,17 @@ namespace NewsApplication.Service.Implementations
                     Targets = new List<GeoCandidateDTO>()
                 };
             }
+            var forcedIso2 = ForceIso2FromTokens(tokens);
 
             // per-token searches in parallel
-            var tokenTasks = tokens.Select(t => ResolveTokenAsync(t, ct)).ToArray();
+            var tokenTasks = new Task<ScopeTokenDTO>[tokens.Count];
+            for (int i = 0; i < tokens.Count; i++)
+            {
+                var previous = i > 0 ? tokens[i - 1] : null;
+                var next = i < tokens.Count - 1 ? tokens[i + 1] : null;
+                tokenTasks[i] = ResolveTokenAsync(tokens[i], previous, next, ct);
+            }
+
             await Task.WhenAll(tokenTasks);
 
             var tokenDtos = tokenTasks.Select(t => t.Result).ToList();
@@ -356,14 +403,30 @@ namespace NewsApplication.Service.Implementations
 
             // 2) Trace sink + ask policy for chosen country
             var traceLines = new List<string>();
+            if (!string.IsNullOrWhiteSpace(forcedIso2))
+            {
+                traceLines.Add($"force.iso2.detected={forcedIso2}");
+            }
             string? chosenFromPolicy = (_policy is ScopePolicy concretePolicy)
                 ? concretePolicy.DebugChooseCountryIso2(countryMatches, nonGeo, (k, v) => traceLines.Add($"{k}:{v}"))
                 : null;
 
+            if (!string.IsNullOrWhiteSpace(forcedIso2) &&
+                !string.Equals(chosenFromPolicy, forcedIso2, StringComparison.OrdinalIgnoreCase))
+            {
+                traceLines.Add($"force.iso2.override={chosenFromPolicy ?? "(null)"}->{forcedIso2}");
+                chosenFromPolicy = forcedIso2;
+            }
             // 3) Decide which ISO2 (if any) we bias by for ordering/targeting
             string? chosenIso2ForTargets = chosenFromPolicy;
             if (string.IsNullOrWhiteSpace(chosenIso2ForTargets))
                 chosenIso2ForTargets = selectedCountryHit?.Dto.CountryIso2;
+
+            if (!string.IsNullOrWhiteSpace(forcedIso2) &&
+                !string.Equals(chosenIso2ForTargets, forcedIso2, StringComparison.OrdinalIgnoreCase))
+            {
+                chosenIso2ForTargets = forcedIso2;
+            }
 
             // NEW: if still empty, infer from the (raw) city rows when they’re all in one country
             if (string.IsNullOrWhiteSpace(chosenIso2ForTargets))
@@ -416,6 +479,7 @@ namespace NewsApplication.Service.Implementations
                 .Count();
 
             var hasChosenCountry = !string.IsNullOrWhiteSpace(chosenIso2ForTargets);
+
 
             bool forcedComposite = false;
             if (distinctIsoForExacts >= 2)
@@ -651,75 +715,208 @@ namespace NewsApplication.Service.Implementations
         }
 
 
-        private async Task<ScopeTokenDTO> ResolveTokenAsync(string token, CancellationToken ct)
+        private async Task<ScopeTokenDTO> ResolveTokenAsync(string token, string? previousToken, string? nextToken, CancellationToken ct)
         {
             var norm = _tokenizer.Normalize(token);
+            var previousNorm = string.IsNullOrWhiteSpace(previousToken) ? null : _tokenizer.Normalize(previousToken);
+            var nextNorm = string.IsNullOrWhiteSpace(nextToken) ? null : _tokenizer.Normalize(nextToken);
 
-            var (countryTask, cityTask) = (
-                _countries.SearchAsync(norm, 10, ct),
-                _cities.SearchAsync(norm, 10, ct)
-            );
+            var contextPhrases = new List<string>();
+            var contextPhraseSet = new HashSet<string>(StringComparer.Ordinal);
 
-            await Task.WhenAll(countryTask, cityTask);
+            void AddContextPhrase(string? phrase)
+            {
+                if (string.IsNullOrWhiteSpace(phrase))
+                    return;
+
+                if (contextPhraseSet.Add(phrase))
+                    contextPhrases.Add(phrase);
+            }
+
+            if (!string.IsNullOrEmpty(previousNorm))
+                AddContextPhrase($"{previousNorm} {norm}");
+
+            if (!string.IsNullOrEmpty(nextNorm))
+                AddContextPhrase($"{norm} {nextNorm}");
+
+            if (!string.IsNullOrEmpty(previousNorm) && !string.IsNullOrEmpty(nextNorm))
+                AddContextPhrase($"{previousNorm} {norm} {nextNorm}");
+
+            var countryTask = _countries.SearchAsync(norm, 10, ct);
+            var cityTask = _cities.SearchAsync(norm, 10, ct);
+
+            var contextCountryTasks = contextPhrases
+                .Select(p => (phrase: p, task: _countries.SearchAsync(p, 10, ct)))
+                .ToList();
+
+            var contextCityTasks = contextPhrases
+                .Select(p => (phrase: p, task: _cities.SearchAsync(p, 10, ct)))
+                .ToList();
+
+          
+            var tasksToAwait = new List<Task> { countryTask, cityTask };
+            tasksToAwait.AddRange(contextCountryTasks.Select(t => t.task));
+            tasksToAwait.AddRange(contextCityTasks.Select(t => t.task));
+            await Task.WhenAll(tasksToAwait);
+
+
             var rawCountries = countryTask.Result;
-            var cities = cityTask.Result;
+            var rawCities = cityTask.Result;
 
             // === COUNTRY POST-PROCESSING ===
             // 1) Boost exact ISO2 or exact name to Score = 1.0
             // 2) Enforce CountryThreshold for the rest
-            var countries = new List<GeoCandidateDTO>(rawCountries.Count);
-            foreach (var co in rawCountries)
+            var countryCandidates = new List<CountryCandidate>();
+
+            void AddCountryCandidates(IEnumerable<GeoCandidateDTO> results, bool fromContext, string? phraseNorm)
             {
-                var nameN = _tokenizer.Normalize(co.Name ?? string.Empty);
-                var iso2N = _tokenizer.Normalize(co.CountryIso2 ?? co.Id ?? string.Empty);
-                var iso3N = _tokenizer.Normalize(co.CountryIso3 ?? string.Empty);
-
-                var isIsoExact = string.Equals(iso2N, norm, StringComparison.Ordinal)
-               || string.Equals(iso3N, norm, StringComparison.Ordinal);
-                var isNameExact = string.Equals(nameN, norm, StringComparison.Ordinal);
-                var isExact = isIsoExact || isNameExact;
-
-                // clone/adjust: if your DTO is a record/class with settable Score, use a copy;
-                // otherwise, create a new instance with the same fields except Score.
-                var adjusted = co;
-                if (isExact)
+                foreach (var co in results)
                 {
-                    adjusted = new GeoCandidateDTO
-                    {
-                        Id = co.Id,
-                        Name = co.Name,
-                        CountryIso2 = co.CountryIso2,
-                        CountryIso3 = co.CountryIso3,   // keep threading
-                        CountryName = co.CountryName,
-                        Lat = co.Lat,
-                        Lng = co.Lng,
-                        Score = 1.0
-                    };
-                }
+                    var nameN = _tokenizer.Normalize(co.Name ?? string.Empty);
+                    var iso2N = _tokenizer.Normalize(co.CountryIso2 ?? co.Id ?? string.Empty);
+                    var iso3N = _tokenizer.Normalize(co.CountryIso3 ?? string.Empty);
 
-                // Keep if exact OR above threshold
-                if (isExact || adjusted.Score >= CountryThreshold)
-                    countries.Add(adjusted);
+                    var isoExactSingle = string.Equals(iso2N, norm, StringComparison.Ordinal)
+                        || string.Equals(iso3N, norm, StringComparison.Ordinal);
+                    var nameExactSingle = string.Equals(nameN, norm, StringComparison.Ordinal);
+
+                    bool isoExactContext = false;
+                    bool nameExactContext = false;
+                    if (!string.IsNullOrEmpty(phraseNorm))
+                    {
+                    isoExactContext = string.Equals(iso2N, phraseNorm, StringComparison.Ordinal)
+                            || string.Equals(iso3N, phraseNorm, StringComparison.Ordinal);
+                        nameExactContext = string.Equals(nameN, phraseNorm, StringComparison.Ordinal);
+                    }
+                var shouldKeep = isoExactSingle || nameExactSingle || isoExactContext || nameExactContext || co.Score >= CountryThreshold;
+                if (!shouldKeep)
+                {
+                    continue;
+                }
+                    var exactHit = isoExactSingle || nameExactSingle || isoExactContext || nameExactContext;
+                    var adjusted = exactHit
+                        ? new GeoCandidateDTO
+                        {
+                            Id = co.Id,
+                            Name = co.Name,
+                            CountryIso2 = co.CountryIso2,
+                            CountryIso3 = co.CountryIso3,
+                            CountryName = co.CountryName,
+                            Lat = co.Lat,
+                            Lng = co.Lng,
+                            Score = 1.0
+                        }
+                        : co;
+
+                    countryCandidates.Add(new CountryCandidate(
+                        adjusted,
+                        fromContext,
+                        isoExactSingle,
+                        nameExactSingle,
+                        isoExactContext || nameExactContext,
+                        !nameN.Contains(' ')));
+                }
+            }
+            AddCountryCandidates(rawCountries, false, null);
+            foreach (var (phrase, task) in contextCountryTasks)
+            {
+                AddCountryCandidates(task.Result, true, phrase);
+            }
+            var orderedCountryCandidates = countryCandidates
+                .GroupBy(c => c.Dto.CountryIso2 ?? c.Dto.Id ?? c.Dto.Name, StringComparer.OrdinalIgnoreCase)
+                .Select(g => g
+                    .OrderByDescending(c => c.IsContextExact)
+                    .ThenByDescending(c => c.IsIsoExactSingleToken)
+                    .ThenByDescending(c => c.IsNameExactSingleToken)
+                    .ThenByDescending(c => c.IsSingleTokenName)
+                    .ThenByDescending(c => c.FromContext)
+                    .ThenByDescending(c => c.Dto.Score)
+                    .ThenBy(c => c.Dto.Name, StringComparer.OrdinalIgnoreCase)
+                    .First())
+                .ToList();
+
+            var countries = orderedCountryCandidates
+                .Select(c => c.Dto)
+                .ToList();
+
+            var cityCandidates = new Dictionary<string, GeoCandidateDTO>(StringComparer.OrdinalIgnoreCase);
+
+            void AddCityResults(IEnumerable<GeoCandidateDTO> results, string? phraseNorm)
+            {
+                foreach (var city in results)
+                {
+                    var adjusted = city;
+                    if (!string.IsNullOrEmpty(phraseNorm))
+                    {
+                        var cityNameNorm = _tokenizer.Normalize(city.Name ?? string.Empty);
+                        if (string.Equals(cityNameNorm, phraseNorm, StringComparison.Ordinal))
+                        {
+                            adjusted = new GeoCandidateDTO
+                            {
+                                Id = city.Id,
+                                Name = city.Name,
+                                CountryIso2 = city.CountryIso2,
+                                CountryIso3 = city.CountryIso3,
+                                CountryName = city.CountryName,
+                                Lat = city.Lat,
+                                Lng = city.Lng,
+                                Score = 1.0
+                            };
+                        }
+                    }
+
+                    var key = city.Id;
+                    if (string.IsNullOrWhiteSpace(key))
+                    {
+                        key = $"{city.Name}|{city.CountryIso2}";
+                    }
+
+                    if (cityCandidates.TryGetValue(key, out var existing))
+                    {
+                        if (adjusted.Score > existing.Score)
+                        {
+                            cityCandidates[key] = adjusted;
+                        }
+                    }
+                    else
+                    {
+                        cityCandidates[key] = adjusted;
+                    }
+                }
             }
 
-            // === TOKEN CLASSIFICATION (unchanged logic) ===
+            AddCityResults(rawCities, null);
+            foreach (var (phrase, task) in contextCityTasks)
+            {
+                AddCityResults(task.Result, phrase);
+            }
+
+            var cities = cityCandidates.Values
+                .OrderByDescending(c => c.Score)
+                .ThenBy(c => c.Name, StringComparer.OrdinalIgnoreCase)
+                .ToList();
+
+
             var matchedType = "non-geo";
 
-            var topCountry = countries.FirstOrDefault();
-            var isoExactTop = topCountry != null && (
-            string.Equals(_tokenizer.Normalize(topCountry.Id ?? topCountry.CountryIso2 ?? string.Empty), norm, StringComparison.Ordinal)
-         || string.Equals(_tokenizer.Normalize(topCountry.CountryIso3 ?? string.Empty), norm, StringComparison.Ordinal)
-            );
-
-            if (topCountry != null && (isoExactTop || topCountry.Score >= CountryThreshold))
+            var topCountryCandidate = orderedCountryCandidates.FirstOrDefault();
+            if (topCountryCandidate != null)
             {
-                matchedType = "country";
+                if (topCountryCandidate.IsIsoExactSingleToken
+                     || topCountryCandidate.IsNameExactSingleToken
+                     || topCountryCandidate.IsContextExact
+                     || (topCountryCandidate.IsSingleTokenName && topCountryCandidate.Dto.Score >= CountryThreshold))
+                {
+                    matchedType = "country";
+                }
             }
-            else
+            if (matchedType != "country")
             {
                 var topCity = cities.FirstOrDefault();
                 if (topCity != null && topCity.Score >= CityThreshold)
+                {
                     matchedType = "city";
+                }
             }
 
             return new ScopeTokenDTO
@@ -731,6 +928,7 @@ namespace NewsApplication.Service.Implementations
                 Cities = cities
             };
         }
-
+        
     }
 }
+    

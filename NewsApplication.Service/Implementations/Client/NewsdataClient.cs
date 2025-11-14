@@ -113,22 +113,28 @@ public sealed class NewsdataClient : INewsdataClient
 
             var key = kv[0].Trim().ToLowerInvariant();
             var val = kv[1].Trim();
+            var rawVal = Uri.UnescapeDataString(val);
 
             switch (key)
             {
                 case "country":
-                    qp.Add($"country={Uri.EscapeDataString(val)}");
+                    // newsdata expects ISO2 (lowercase). Keep whatever the resolver provided,
+                    // but normalize to lower to be safe.
+                                        {
+                        qp.Add($"country={Uri.EscapeDataString(
+                        (rawVal ?? string.Empty).ToLowerInvariant())}");
+                    }
                     break;
                 case "category":
                 case "cats":
-                    qp.Add($"category={Uri.EscapeDataString(val)}");
+                    qp.Add($"category={Uri.EscapeDataString(rawVal)}");
                     break;
                 case "language":
                 case "lang":
-                    qp.Add($"language={Uri.EscapeDataString(val)}");
+                    qp.Add($"language={Uri.EscapeDataString(rawVal)}");
                     break;
                 case "q": // free-text search
-                    qp.Add($"q={Uri.EscapeDataString(val)}");
+                    qp.Add($"q={Uri.EscapeDataString(rawVal)}");
                     break;
             }
         }

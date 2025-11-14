@@ -82,19 +82,39 @@ public sealed class ScopeController : ControllerBase
         return ascii;
     }
 
-    private static string AppendQ(string scope, string? q)
-        => string.IsNullOrWhiteSpace(q) ? scope : $"{scope}|q:{Uri.EscapeDataString(q.Trim())}";
-
-    private static string CityScopeKey(string cityName, string countryIso2, string? keywords)
+    private static string CityScopeKey(string? cityName, string? countryIso2, string? query)
     {
-        var slug = $"{Slugify(cityName)}-{(countryIso2 ?? "").Trim().ToLowerInvariant()}";
-        return AppendQ($"city:{slug}", keywords);
+        var isoLower = (countryIso2 ?? string.Empty).Trim().ToLowerInvariant();
+        var slugRoot = Slugify(cityName ?? string.Empty);
+        var slug = string.IsNullOrWhiteSpace(slugRoot)
+            ? isoLower
+            : string.IsNullOrWhiteSpace(isoLower) ? slugRoot : $"{slugRoot}-{isoLower}";
+
+        var segments = new List<string>();
+        if (!string.IsNullOrWhiteSpace(slug))
+            segments.Add($"city:{slug}");
+
+        var isoUpper = (countryIso2 ?? string.Empty).Trim().ToUpperInvariant();
+        if (!string.IsNullOrWhiteSpace(isoUpper))
+            segments.Add($"country:{isoUpper}");
+
+        if (!string.IsNullOrWhiteSpace(query))
+            segments.Add($"q:{query.Trim()}");
+
+        return string.Join('|', segments);
     }
 
-    private static string CountryScopeKey(string iso2, string? keywords)
+    private static string CountryScopeKey(string? iso2, string? query)
     {
-        var code = (iso2 ?? "").Trim().ToUpperInvariant();
-        return AppendQ($"country:{code}", keywords);
+        var segments = new List<string>();
+        var code = (iso2 ?? string.Empty).Trim().ToUpperInvariant();
+        if (!string.IsNullOrWhiteSpace(code))
+            segments.Add($"country:{code}");
+
+        if (!string.IsNullOrWhiteSpace(query))
+            segments.Add($"q:{query.Trim()}");
+
+        return string.Join('|', segments);
     }
 
     private static string BuildCityLabel(string? name, string? countryIso2)
@@ -105,8 +125,43 @@ public sealed class ScopeController : ControllerBase
         if (trimmedName is null) return iso!;
         return iso is null ? trimmedName : $"{trimmedName}, {iso}";
     }
+    // Remove country mentions from q when we already have ISO2 (generic for any country)
+    private static string? SanitizeQueryForCountry(string? q, string? iso2, string? countryName, string? iso3 = null)
+    {
+        if (string.IsNullOrWhiteSpace(q)) return null;
 
-  
+        string norm(string s) =>
+            Regex.Replace(s.Normalize(NormalizationForm.FormD), @"\p{Mn}", "")
+                 .Normalize(NormalizationForm.FormC)
+                 .ToLowerInvariant();
+
+        var kill = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        if (!string.IsNullOrWhiteSpace(iso2)) kill.Add(norm(iso2!));
+        if (!string.IsNullOrWhiteSpace(iso3)) kill.Add(norm(iso3!));
+        if (!string.IsNullOrWhiteSpace(countryName)) kill.Add(norm(countryName!));
+
+        // token filter: drop exact matches to iso2/iso3/country name token(s)
+        var tokens = Regex.Split(q, @"\s+")
+                          .Select(t => t.Trim())
+                          .Where(t => t.Length > 0)
+                          .ToList();
+
+        var kept = tokens.Where(t => !kill.Contains(norm(t))).ToList();
+
+        // If user typed "Skopje North Macedonia", kill full-name tokens too:
+        var joined = string.Join(" ", kept);
+        if (!string.IsNullOrWhiteSpace(countryName))
+        {
+            var cn = norm(countryName!);
+            // remove full phrase occurrences loosely
+            joined = Regex.Replace(joined, $@"\b{Regex.Escape(cn)}\b", "", RegexOptions.IgnoreCase).Trim();
+        }
+
+        return string.Join(" ", Regex.Split(joined, @"\s+").Where(s => s.Length > 0));
+    }
+
+
+
 
     // -------------------------------------------
     // Resolve with combined inputs (city/country + q)
@@ -129,11 +184,15 @@ public sealed class ScopeController : ControllerBase
                 : null;
 
             var cityName = city?.Name ?? req.City.Name;
-            var iso2 = (city?.CountryIso2 ?? req.City.CountryIso2 ?? "")
-            .ToUpperInvariant();
+            var iso2 = (city?.CountryIso2 ?? req.City.CountryIso2 ?? "").ToUpperInvariant();
 
+            // fetch country dto once (for label + sanitizing)
+            var countryDto = string.IsNullOrWhiteSpace(iso2) ? null : await countryService.GetByIdAsync(iso2, ct);
 
-            var scopeKey = CityScopeKey(cityName, iso2, req.Q);
+            // sanitize q against country
+            var cleanQ = SanitizeQueryForCountry(req.Q, iso2, countryDto?.Name, countryDto?.CountryIso3);
+
+            var scopeKey = CityScopeKey(cityName, iso2, cleanQ);
 
             var cityIdStr = !string.IsNullOrWhiteSpace(city?.Id) ? city!.Id : null;
 
@@ -141,42 +200,44 @@ public sealed class ScopeController : ControllerBase
             {
                 ScopeKey = scopeKey,
                 Kind = "city",
-                Label = BuildCityLabel(cityName, iso2),
+                Label = await BuildCityLabelWithCountryNameAsync(countryService, cityName, iso2, ct),
                 CountryIso2 = iso2,
                 CountryIso3 = (city?.CountryIso3 ?? "").ToUpperInvariant(),
                 CityId = cityIdStr ?? (req.City.Id != Guid.Empty ? req.City.Id.ToString() : null),
                 FocusLat = city?.Lat,
                 FocusLng = city?.Lng
             });
+
         }
 
         // 2) Explicit country pick (with optional Q)
         if (req.Country is not null)
         {
             var iso2 = (req.Country.Iso2 ?? "").ToUpperInvariant();
-            var scopeKey = CountryScopeKey(iso2, req.Q);
-
             var country = !string.IsNullOrWhiteSpace(iso2)
                 ? await countryService.GetByIdAsync(iso2, ct)
                 : null;
 
+            var cleanQ = SanitizeQueryForCountry(req.Q, iso2, country?.Name, country?.CountryIso3);
+            var scopeKey = CountryScopeKey(iso2, cleanQ);
+
             return Ok(new ResolveScopeResponse
             {
-                ScopeKey   = scopeKey,                 // e.g., country:CA|q:sports
-                Kind       = "country",
-                Label      = string.IsNullOrWhiteSpace(req.Country.Name)
-                                ? country?.Name ?? iso2
-                                : req.Country.Name,
-                CountryIso2= country?.CountryIso2 ?? iso2,
-                CountryIso3= country?.CountryIso3?.ToUpperInvariant() ?? req.Country.Iso3?.ToUpperInvariant(),
-                FocusLat   = country?.Lat,
-                FocusLng   = country?.Lng
+                ScopeKey = scopeKey,        // e.g., country:CA|q:sports (without the country name)
+                Kind = "country",
+                Label = string.IsNullOrWhiteSpace(req.Country.Name) ? country?.Name ?? iso2 : req.Country.Name,
+                CountryIso2 = country?.CountryIso2 ?? iso2,
+                CountryIso3 = country?.CountryIso3?.ToUpperInvariant() ?? req.Country.Iso3?.ToUpperInvariant(),
+                FocusLat = country?.Lat,
+                FocusLng = country?.Lng
             });
+
         }
 
         // 3) Free text (kept your preview-based logic, unchanged except small refactors)
         if (!string.IsNullOrWhiteSpace(req.Q))
         {
+            var trimmed = req.Q.Trim();
             var preview = await resolver.PreviewAsync(req.Q, ct);
 
             var keywords = (preview.NonGeoKeywords ?? new List<string>())
@@ -186,21 +247,29 @@ public sealed class ScopeController : ControllerBase
                 .OrderBy(s => s, StringComparer.OrdinalIgnoreCase)
                 .ToArray();
 
+            var keywordQuery = keywords.Length > 0
+               ? string.Join(' ', keywords)
+               : trimmed;
+
             string KwSuffix(string[] kw)
                 => kw.Length == 0 ? string.Empty
                 : "|kw:" + Uri.EscapeDataString(string.Join(' ', kw));
+
 
             // Prefer best city; else best country; else generic q:
             var bestCity = preview.CityMatches?.OrderByDescending(m => m.Score).FirstOrDefault();
             if (bestCity is not null)
             {
                 var iso2 = (bestCity.CountryIso2 ?? "").ToUpperInvariant();
+                var countryDto = string.IsNullOrWhiteSpace(iso2) ? null : await countryService.GetByIdAsync(iso2, ct);
+                var cleanQ = SanitizeQueryForCountry(trimmed, iso2, countryDto?.Name, countryDto?.CountryIso3);
+
                 return Ok(new ResolveScopeResponse
                 {
-                    ScopeKey   = CityScopeKey(bestCity.Name, iso2, /*keywords in combined path go to q*/ null) + KwSuffix(keywords),
+                    ScopeKey = CityScopeKey(bestCity.Name, iso2, cleanQ) + KwSuffix(keywords),
                     Kind       = "city",
-                    Label      = BuildCityLabel(bestCity.Name, iso2),
-                    CountryIso2= iso2,
+                    Label      = await BuildCityLabelWithCountryNameAsync(countryService, bestCity.Name, iso2, ct),
+                    CountryIso2 = iso2,
                     CountryIso3= bestCity.CountryIso3?.ToUpperInvariant(),
                     CityId     = bestCity.Id,
                     FocusLat   = bestCity.Lat,
@@ -210,11 +279,15 @@ public sealed class ScopeController : ControllerBase
 
             var bestCountry = preview.CountryMatches?.OrderByDescending(m => m.Score).FirstOrDefault();
             if (bestCountry is not null)
+
             {
                 var iso2 = (bestCountry.CountryIso2 ?? bestCountry.Id ?? "").ToUpperInvariant();
+                var countryDto = string.IsNullOrWhiteSpace(iso2) ? null : await countryService.GetByIdAsync(iso2, ct);
+                var cleanQ = SanitizeQueryForCountry(trimmed, iso2, countryDto?.Name, countryDto?.CountryIso3);
+
                 return Ok(new ResolveScopeResponse
                 {
-                    ScopeKey   = CountryScopeKey(iso2, /*combined q*/ null) + KwSuffix(keywords),
+                    ScopeKey = CountryScopeKey(iso2, cleanQ) + KwSuffix(keywords),
                     Kind       = "country",
                     Label      = bestCountry.Name,
                     CountryIso2= iso2,
@@ -224,7 +297,6 @@ public sealed class ScopeController : ControllerBase
                 });
             }
 
-            var trimmed = req.Q.Trim();
             return Ok(new ResolveScopeResponse
             {
                 ScopeKey = $"q:{trimmed}" + KwSuffix(keywords),
@@ -234,6 +306,20 @@ public sealed class ScopeController : ControllerBase
         }
 
         return BadRequest(new { error = "Provide either q, city, or country." });
+    }
+    private static async Task<string> BuildCityLabelWithCountryNameAsync(
+    ICountryReadService countryService,
+    string? cityName,
+    string? iso2,
+    CancellationToken ct)
+    {
+        var code = (iso2 ?? "").Trim().ToUpperInvariant();
+        var dto = string.IsNullOrWhiteSpace(code) ? null : await countryService.GetByIdAsync(code, ct);
+        var countryText = dto?.Name ?? code; // fallback to ISO2 if not found
+                                             // Reuse your existing formatting (City, Suffix)
+        return string.IsNullOrWhiteSpace(cityName)
+            ? (countryText ?? string.Empty)
+            : $"{cityName.Trim()}, {countryText}";
     }
 
     [HttpPost("reverse")]
@@ -257,12 +343,13 @@ public sealed class ScopeController : ControllerBase
         if (city is not null)
         {
             var iso2 = (city.CountryIso2 ?? "").ToUpperInvariant();
+      
             return Ok(new ResolveScopeResponse
             {
                 ScopeKey   = CityScopeKey(city.Name, iso2, null), // e.g., city:skopje-mk
                 Kind       = "city",
-                Label      = BuildCityLabel(city.Name, iso2),
-                CountryIso2= iso2,
+                Label      = await BuildCityLabelWithCountryNameAsync(countryService, city.Name, iso2, ct),
+                CountryIso2 = iso2,
                 CountryIso3= city.CountryIso3?.ToUpperInvariant(),
                 CityId     = city.Id,
                 FocusLat   = city.Lat,

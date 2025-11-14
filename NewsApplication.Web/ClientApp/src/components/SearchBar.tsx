@@ -9,10 +9,16 @@
 } from 'react';
 import { preview, ScopeKind, type PreviewGeoCandidate, type PreviewResponse } from '../api';
 
+export type GeoPickContext = {
+    fullText: string;
+    keywordTail?: string;
+};
 interface Props {
-    onSearch: (q: string) => void;
-    onPickCity?: (city: PreviewGeoCandidate) => void;
-    onPickCountry?: (country: PreviewGeoCandidate) => void;
+    onSearch: (q: string, opts?: { countryIso2?: string }) => void;
+    onPickCity?: (city: PreviewGeoCandidate, context?: GeoPickContext) => void;
+    onPickCountry?: (country: PreviewGeoCandidate, context?: GeoPickContext) => void;
+    onPreviewCity?: (city: PreviewGeoCandidate, keywords?: string) => void;
+    onPreviewCountry?: (country: PreviewGeoCandidate, keywords?: string) => void;
     inline?: boolean;
     actionRef?: Ref<HTMLButtonElement>;
     value?: string; // controlled text from parent (e.g., "Skopje")
@@ -50,6 +56,8 @@ export default function SearchBar({
     onSearch,
     onPickCity,
     onPickCountry,
+    onPreviewCity,
+    onPreviewCountry,
     onAmbiguous,
     inline = false,
     actionRef,
@@ -69,23 +77,22 @@ export default function SearchBar({
 
     // NEW
     const [pendingPick, setPendingPick] =
-        useState<null | { t: 'city' | 'country'; v: PreviewGeoCandidate; k: string }>(null);
+        useState<
+            | null
+            | {
+                t: 'city' | 'country';
+                v: PreviewGeoCandidate;
+                k: string;
+                text: string;
+            }
+        >(null);
     const inputRef = useRef<HTMLInputElement>(null);
     const refocusNoScroll = () => inputRef.current?.focus({ preventScroll: true });
-    // keep local state in sync with parent-controlled value
-    useEffect(() => {
-        if (typeof value === 'string') {
-            setQ(value);
-            setDirty(false);
-            setPreviewResult(null);
-        }
-    }, [value]);
 
     // Replace the entire value sync useEffect with this simpler version:
     const hasInteractedRef = useRef(false);
 
     useEffect(() => {
-        // Only sync from parent if the user hasn't started interacting yet
         if (!hasInteractedRef.current && typeof value === 'string') {
             setQ(value);
             setDirty(false);
@@ -101,7 +108,7 @@ export default function SearchBar({
         setQ(e.target.value);
         setFocused(true);
     };
-  
+
     useEffect(
         () => () => {
             if (blurTimer.current !== null) {
@@ -152,7 +159,7 @@ export default function SearchBar({
     const handleFocus = () => {
         clearBlurTimer();
         setFocused(true);
-        refocusNoScroll(); 
+        refocusNoScroll();
     };
 
     const handleBlur = () => {
@@ -171,24 +178,32 @@ export default function SearchBar({
 
     const selectCity = (candidate: PreviewGeoCandidate) => {
         if (!candidate?.id) return;
-        const tail = capturedKeywords(previewResult);                 // NEW: capture before clearing
-        setPendingPick({ t: 'city', v: candidate, k: tail });
+        const tail = capturedKeywords(previewResult);
+        const phrase = cityPhrase(candidate);
+        const text = applyGeoSuggestion(trimmed, phrase, tail, candidate);
+
+        setPendingPick({ t: 'city', v: candidate, k: tail, text });
+        onPreviewCity?.(candidate, tail);
         setDirty(false);
         setPreviewResult(null);
         // was: setQ(candidate.name ?? '');
-        setQ(withKeywords(candidate.name ?? '', previewResult)); // ← keep non-geo in input
+        setQ(text);
         setFocused(true);
         refocusNoScroll();
     };
 
     const selectCountry = (candidate: PreviewGeoCandidate) => {
         if (!candidate?.id) return;
-        const tail = capturedKeywords(previewResult);                 // NEW
-        setPendingPick({ t: 'country', v: candidate, k: tail });    
+        const tail = capturedKeywords(previewResult);
+        const phrase = countryPhrase(candidate);
+        const text = applyGeoSuggestion(trimmed, phrase, tail, candidate);
+
+        setPendingPick({ t: 'country', v: candidate, k: tail, text });
+        onPreviewCountry?.(candidate, tail);     // NEW
         setDirty(false);
         setPreviewResult(null);
         // was: setQ(candidate.name ?? '');
-        setQ(withKeywords(candidate.name ?? '', previewResult)); // ← keep non-geo in input
+        setQ(text);
         setFocused(true);
         refocusNoScroll();
     };
@@ -200,43 +215,24 @@ export default function SearchBar({
         hasInteractedRef.current = true;
         if (!text && !pendingPick) return;
 
-        // AUTO-SELECT: If suggestions are showing and user didn't pick one, auto-select the first
-        if (!pendingPick && showSuggestions && (cityPills.length > 0 || countryPills.length > 0)) {
-            const tail = capturedKeywords(previewResult);
-
-            const candidate = cityPills.length > 0
-                ? { t: 'city' as const, v: cityPills[0] }
-                : { t: 'country' as const, v: countryPills[0] };
-
-            const { t, v } = candidate;
-            const nextQ = tail ? `${v.name ?? ''} ${tail}`.trim() : (v.name ?? '');
-
-            clearGeo();
-            setDirty(false);
-            setPreviewResult(null);
-            setQ(nextQ);
-
-            if (t === 'city') onPickCity?.(v);
-            else onPickCountry?.(v);
-
-            inputRef.current?.focus();
-            refocusNoScroll();
-            setFocused(true);
-            return;
-        }
-
         // If a pill was staged (via keyboard Enter), commit it and stop.
         if (pendingPick) {
             clearGeo();
-            const { t, v, k } = pendingPick;
-            const nextQ = k ? `${v.name ?? ''} ${k}`.trim() : (v.name ?? '');
+            const { t, v, k, text: stagedText } = pendingPick;
+            const nextQ = stagedText.trim();
             setPendingPick(null);
             setDirty(false);
             setPreviewResult(null);
             setQ(nextQ);
 
-            if (t === 'city') onPickCity?.(v);
-            else onPickCountry?.(v);
+            const keywordTail = k.trim().length ? k.trim() : undefined;
+            const context: GeoPickContext = {
+                fullText: nextQ,
+                ...(keywordTail ? { keywordTail } : {}),
+            };  
+
+            if (t === 'city') onPickCity?.(v, context);
+            else onPickCountry?.(v, context);
 
             inputRef.current?.focus();
             refocusNoScroll();
@@ -267,10 +263,16 @@ export default function SearchBar({
                 null;
 
             if (chosen) {
-                // We have a country signal → let server resolve to in-country city and keep keywords
                 onClearGeo?.();
                 setDirty(false); setPreviewResult(null);
-                onSearch(text); // proceed to resolveScope + articles
+
+                const base = bestLabelFromPreview(pr) ?? text;
+                const nextDisplay = mergeSuggestion(text, base, capturedKeywords(pr));
+                setQ(nextDisplay);
+
+                const safeQ = sanitizeQueryForApi(nextDisplay, pr);  
+                const iso2 = (chosen || '').toUpperCase();
+                onSearch(safeQ, iso2 ? { countryIso2: iso2 } : undefined);
                 inputRef.current?.focus(); refocusNoScroll(); setFocused(true);
                 return;
             }
@@ -299,7 +301,7 @@ export default function SearchBar({
         }
 
         if (pr.kind === ScopeKind.CityInCountry && pr.isAmbiguous) {
-            clearGeo(); 
+            clearGeo();
             const iso = pr.outlineIso2 ?? (pr.diagnostics && (pr.diagnostics['chosenIso2'] as string | undefined)) ?? null;
             const inCountry = iso
                 ? cities.filter(c => (c.countryIso2 ?? '').toUpperCase() === iso.toUpperCase())
@@ -343,7 +345,7 @@ export default function SearchBar({
             }
         }
         if (compositePins && compositePins.length >= 2) {
-            clearGeo(); 
+            clearGeo();
             onAmbiguous?.({
                 outlineIso2: null, // cross-country → no outline
                 cities: compositePins,
@@ -361,12 +363,14 @@ export default function SearchBar({
         // --- C) Composite but not ambiguous → keyword-only search (drop geo) ---
         if (pr.kind === ScopeKind.Composite && !pr.isAmbiguous) {
             const tail = capturedKeywords(pr);
-            const base = bestLabelFromPreview(pr) ?? text;      // show normalized geo if we have it
-            setQ(tail ? `${base} ${tail}`.trim() : base);
-            const kw = (pr.nonGeoKeywords ?? []).join(' ').trim();
+            const base = bestLabelFromPreview(pr) ?? text;
+            const nextDisplay = mergeSuggestion(text, base, tail);
+            setQ(nextDisplay);
             onClearGeo?.();
             setDirty(false); setPreviewResult(null);
-            onSearch(kw || text);
+            const safeQ = sanitizeQueryForApi(nextDisplay, pr);
+            const iso2 = iso2FromPreview(pr);
+            onSearch(safeQ, iso2 ? { countryIso2: iso2 } : undefined);
             inputRef.current?.focus(); refocusNoScroll(); setFocused(true);
             return;
         }
@@ -374,250 +378,558 @@ export default function SearchBar({
         // --- D) Otherwise proceed with a real search ---
         const tail = capturedKeywords(pr);
         const base = bestLabelFromPreview(pr) ?? text;
-        setQ(tail ? `${base} ${tail}`.trim() : base);
+        const nextText = mergeSuggestion(text, base, tail);
+        setQ(nextText);
+
 
         onClearGeo?.();
         setDirty(false); setPreviewResult(null);
-        onSearch(text);
+        const qForApi = sanitizeQueryForApi(nextText, pr);
+        const iso2 = iso2FromPreview(pr);
+        onSearch(qForApi, iso2 ? { countryIso2: iso2 } : undefined);
         inputRef.current?.focus(); refocusNoScroll(); setFocused(true);
         return;
     };
-  
 
-    function withKeywords(base: string, pr: PreviewResponse | null) {
-        const kws = (pr?.nonGeoKeywords ?? []).filter(Boolean);
-        if (!kws.length) return base.trim();
-        return `${base} ${kws.join(' ')}`.trim();
-    }
-    function capturedKeywords(pr: PreviewResponse | null) {
-        return (pr?.nonGeoKeywords ?? []).filter(Boolean).join(" ");
-    }
-
-    function labelFor(x: PreviewGeoCandidate) {
-        const iso = (x.countryIso2 ?? x.countryIso3 ?? "").trim();
-        return iso ? `${x.name ?? ""}, ${up(iso)}` : (x.name ?? "");
-    }
-
-    function bestLabelFromPreview(pr: PreviewResponse | null): string | null {
-        if (!pr) return null;
-
-        // Prefer a city; bias to a server-chosen country if present
-        const chosenIso = up(
-            (pr.outlineIso2 ??
-                (pr.diagnostics && (pr.diagnostics["chosenIso2"] as string | undefined)) ??
-                "") || ""
-        );
-
-        const cities = pr.cityMatches ?? [];
-        const topCity =
-            (chosenIso && cities.find(c => up(c.countryIso2 ?? "") === chosenIso)) ||
-            (cities.length ? cities[0] : null);
-
-        if (topCity?.name) return labelFor(topCity);
-
-        // Fall back to a country
-        const countries = pr.countryMatches ?? [];
-        if (countries.length) return labelFor(countries[0]);
-
-        return null;
-    }
-
-    // ----- Build pills (API + synthesized) --------------------------------------
-
-    // From API
-    const apiCountryPills = previewResult?.countryMatches ?? [];
-    const cityPills = previewResult?.cityMatches ?? [];
-
-    // Display helpers
-    const countryNameOf = (c: PreviewGeoCandidate) =>
-        (c.countryName ?? '').trim();
-    const countryIsoOf = (c: PreviewGeoCandidate) =>
-        up(c.countryIso2 ?? c.countryIso3);
-
-    // Synthesize countries from city matches (for the Countries group)
-    const countriesFromCitiesRaw: PreviewGeoCandidate[] = cityPills
-        .map((c) => {
-            const name = countryNameOf(c);
-            const iso = countryIsoOf(c);
-            if (!name) return null;
-            return {
-                id: iso || up(name), // stable id (prefer ISO)
-                name,                 // country display name
-                countryIso2: iso || undefined,
-            } as PreviewGeoCandidate;
-        })
-        .filter(Boolean) as PreviewGeoCandidate[];
-
-    // Merge & dedupe
-    const countryPills = dedupeBy(
-        [...apiCountryPills, ...countriesFromCitiesRaw],
-        (x) => (x.countryIso2 ? up(x.countryIso2) : up(x.id || x.name))
-    ).slice(0, 8); // keep list tight
-
-
-    // reset the active index whenever the suggestion set changes
     
+        // ----- Build pills (API + synthesized) --------------------------------------
 
-    useEffect(() => {
-        setActive(-1);
-    }, [cityPills.length, countryPills.length, trimmed]);
+        // From API
+        const apiCountryPills = previewResult?.countryMatches ?? [];
+        const cityPills = previewResult?.cityMatches ?? [];
 
-    const hasSuggestions = countryPills.length > 0 || cityPills.length > 0;
-    const showSuggestions = focused && dirty && trimmed.length > 0 && hasSuggestions;
-    const showAmbiguity = dirty && previewResult !== null && !previewResult.canSearch;
+        // Display helpers
+        const countryNameOf = (c: PreviewGeoCandidate) =>
+        normalizeCountryName(c.countryIso2, c.countryName);
 
- 
+        const countryIsoOf = (c: PreviewGeoCandidate) =>
+            up(c.countryIso2 ?? c.countryIso3);
 
-    function onKeyDown(e: React.KeyboardEvent<HTMLInputElement>) {
-        if (!showSuggestions) return;
-        const total = countryPills.length + cityPills.length;
-        if (total === 0) return;
+        // Synthesize countries from city matches (for the Countries group)
+        const countriesFromCitiesRaw: PreviewGeoCandidate[] = cityPills
+            .map((c) => {
+                const name = countryNameOf(c);
+                const iso = countryIsoOf(c);
+                if (!name) return null;
+                return {
+                    id: iso || up(name), // stable id (prefer ISO)
+                    name,                 // country display name
+                    countryIso2: iso || undefined,
+                } as PreviewGeoCandidate;
+            })
+            .filter(Boolean) as PreviewGeoCandidate[];
 
-        if (e.key === 'ArrowDown') {
-            e.preventDefault();
-            setActive(i => (i + 1) % total);
-            return;
-        }
-        if (e.key === 'ArrowUp') {
-            e.preventDefault();
-            setActive(i => (i - 1 + total) % total);
-            return;
-        }
+        // Merge & dedupe
+        const countryPills = dedupeBy(
+            [...apiCountryPills, ...countriesFromCitiesRaw],
+            (x) => (x.countryIso2 ? up(x.countryIso2) : up(x.id || x.name))
+        ).slice(0, 8); // keep list tight
 
-        if (e.key === 'Enter') {
-            // Stage a pick only if the user actually navigated
-            if (active >= 0) {
-                const all = [
-                    ...countryPills.map((c) => ({ t: 'country' as const, v: c })),
-                    ...cityPills.map((c) => ({ t: 'city' as const, v: c })),
-                ];
-                const pick = all[active];
-                if (pick) {
-                    const tail = capturedKeywords(previewResult);  // ← ADD THIS LINE
-                    setPendingPick({ ...pick, k: tail });  // ← SPREAD pick and add k property
-                }
+
+        // reset the active index whenever the suggestion set changes
+
+
+        useEffect(() => {
+            setActive(-1);
+        }, [cityPills.length, countryPills.length, trimmed]);
+
+        const hasSuggestions = countryPills.length > 0 || cityPills.length > 0;
+        const showSuggestions = focused && dirty && trimmed.length > 0 && hasSuggestions;
+        const showAmbiguity = dirty && previewResult !== null && !previewResult.canSearch;
+
+
+
+        function onKeyDown(e: React.KeyboardEvent<HTMLInputElement>) {
+            if (!showSuggestions) return;
+            const total = countryPills.length + cityPills.length;
+            if (total === 0) return;
+
+            if (e.key === 'ArrowDown') {
+                e.preventDefault();
+                setActive(i => (i + 1) % total);
+                return;
             }
-            // Let the form submit to go through submit()
+            if (e.key === 'ArrowUp') {
+                e.preventDefault();
+                setActive(i => (i - 1 + total) % total);
+                return;
+            }
+
+            if (e.key === 'Enter') {
+                // Stage a pick only if the user actually navigated
+                if (active >= 0) {
+                    const all = [
+                        ...countryPills.map((c) => ({ t: 'country' as const, v: c })),
+                        ...cityPills.map((c) => ({ t: 'city' as const, v: c })),
+                    ];
+                    const pick = all[active];
+                    if (pick) {
+                        const tail = capturedKeywords(previewResult);
+                        const phrase = pick.t === 'city' ? cityPhrase(pick.v) : countryPhrase(pick.v);
+                        const textValue = applyGeoSuggestion(trimmed, phrase, tail, pick.v);
+                        setPendingPick({ ...pick, k: tail, text: textValue });
+                        if (pick.t === 'city') {
+                            onPreviewCity?.(pick.v, tail);
+                        } else {
+                            onPreviewCountry?.(pick.v, tail);
+                        }
+                        setDirty(false);
+                        setPreviewResult(null);
+                        setQ(textValue);
+                        refocusNoScroll();
+                    }
+                }
+                // Let the form submit to go through submit()
+            }
+        }
+
+        return (
+            <div className={`searchbar ${inline ? 'searchbar--inline' : ''} ${showSuggestions ? 'is-open' : ''}`}>
+                <form onSubmit={submit} className="searchbar__form">
+                    <div className="searchbar__field">
+                        <input
+                            ref={inputRef}
+                            type="search"
+                            placeholder="Search a country or city..."
+                            value={q}
+                            onChange={handleChange}
+                            onFocus={handleFocus}
+                            onBlur={handleBlur}
+                            onKeyDown={onKeyDown}
+                            aria-autocomplete="list"
+                            aria-expanded={showSuggestions}
+                        />
+                        {q && (
+                            <button
+                                type="button"
+                                className="searchbar__clear"
+                                aria-label="Clear"
+                                onMouseDown={(e) => e.preventDefault()}   // keep focus
+                                onClick={() => {
+                                    clearGeo();
+                                    setQ('');
+                                    setDirty(false);
+                                    setPreviewResult(null);
+                                }}
+                            >
+                                ×
+                            </button>
+                        )}
+
+                        {showSuggestions && (
+                            <div className="searchbar__panel" role="listbox">
+                                {/* Countries (API + inferred from city matches) */}
+                                {countryPills.length > 0 && (
+                                    <div className="searchbar__group">
+                                        <div className="searchbar__group-title">Countries</div>
+                                        <ul className="searchbar__list">
+                                            {countryPills.map((country, idx) => {
+                                                const code = countryIsoOf(country);
+                                                const globalIndex = idx; // first block
+                                                const isActive = active === globalIndex;
+                                                return (
+                                                    <li key={`country-${country.id}`}>
+                                                        <button
+                                                            type="button"
+                                                            role="option"
+                                                            aria-selected={isActive}
+                                                            className={`searchbar__row ${isActive ? 'is-active' : ''}`}
+                                                            onMouseDown={handleSuggestionMouseDown}
+                                                            onMouseEnter={() => setActive(globalIndex)}
+                                                            onClick={() => selectCountry(country)}
+                                                        >
+                                                            <span className="searchbar__row-main">{country.name}</span>
+                                                            {code && <span className="searchbar__chip">{code}</span>}
+                                                        </button>
+                                                    </li>
+                                                );
+                                            })}
+                                        </ul>
+                                    </div>
+                                )}
+
+                                {/* Cities (show country NAME under the city; ISO2 chip on right) */}
+                                {cityPills.length > 0 && (
+                                    <div className="searchbar__group">
+                                        <div className="searchbar__group-title">Cities</div>
+                                        <ul className="searchbar__list">
+                                            {cityPills.map((city, idx) => {
+                                                const globalIndex = countryPills.length + idx;
+                                                const isActive = active === globalIndex;
+                                                const cName = countryNameOf(city);
+                                                const cIso = countryIsoOf(city);
+                                                return (
+                                                    <li key={`city-${city.id}`}>
+                                                        <button
+                                                            type="button"
+                                                            role="option"
+                                                            aria-selected={isActive}
+                                                            className={`searchbar__row ${isActive ? 'is-active' : ''}`}
+                                                            onMouseDown={handleSuggestionMouseDown}
+                                                            onMouseEnter={() => setActive(globalIndex)}
+                                                            onClick={() => selectCity(city)}
+                                                        >
+                                                            <span className="searchbar__row-col">
+                                                                <span className="searchbar__row-main">{city.name}</span>
+                                                                {cName && <span className="searchbar__row-sub">{cName}</span>}
+                                                            </span>
+                                                            {cIso && <span className="searchbar__chip">{cIso}</span>}
+                                                        </button>
+                                                    </li>
+                                                );
+                                            })}
+                                        </ul>
+                                    </div>
+                                )}
+                            </div>
+                        )}
+                    </div>
+                    <button
+                        ref={actionRef}
+                        type="submit"
+                        className="searchbar__submit"
+                    >
+                        {isPreviewing && dirty ? 'Searching…' : 'Search'}
+                    </button>
+                </form>
+
+                {showAmbiguity && (
+                    <div className="searchbar__status">
+                        {previewResult?.kind === ScopeKind.CityInCountry
+                            ? 'Select a city to continue'
+                            : 'Refine your search to choose a location'}
+                    </div>
+                )}
+            </div>
+        );
+}
+
+const whitespaceSplitter = /\s+/g;
+
+function labelFor(x: PreviewGeoCandidate) {
+    const iso = (x.countryIso2 ?? x.countryIso3 ?? "").trim();
+    const baseName = x.name ?? "";
+    const name = normalizeCountryName(x.countryIso2, baseName);
+    return iso ? `${name}, ${up(iso)}` : name;
+}
+
+
+function bestLabelFromPreview(pr: PreviewResponse | null): string | null {
+    if (!pr) return null;
+
+    // Prefer a city; bias to a server-chosen country if present
+    const chosenIso = up(
+        (pr.outlineIso2 ??
+            (pr.diagnostics && (pr.diagnostics["chosenIso2"] as string | undefined)) ??
+            "") || ""
+    );
+
+    const cities = pr.cityMatches ?? [];
+    const topCity =
+        (chosenIso && cities.find(c => up(c.countryIso2 ?? "") === chosenIso)) ||
+        (cities.length ? cities[0] : null);
+
+    if (topCity?.name) return labelFor(topCity);
+
+    // Fall back to a country
+    const countries = pr.countryMatches ?? [];
+    if (countries.length) return labelFor(countries[0]);
+
+    return null;
+}
+
+function normalizeFragment(value: string | null | undefined): string {
+    return (value ?? '').trim().replace(/\s+/g, ' ').toLowerCase();
+}
+
+function splitTokens(value: string | null | undefined): string[] {
+    const trimmed = (value ?? '').trim();
+    return trimmed ? trimmed.split(/\s+/) : [];
+}
+
+function mergeSuggestion(input: string, phrase: string, keywordTail?: string): string {
+    const suggestion = phrase.trim();
+    const base = (input ?? '').trim();
+    const tail = (keywordTail ?? '').trim();
+
+    const baseTokens = splitTokens(base);
+    const suggestionTokens = splitTokens(suggestion);
+    const tailTokens = tail ? tail.split(whitespaceSplitter).filter(Boolean) : [];
+
+    if (!suggestion) {
+        const result = [...baseTokens];
+        for (const keyword of tailTokens) {
+            const norm = normalizeFragment(keyword);
+            if (!result.some(tok => normalizeFragment(tok) === norm)) {
+                result.push(keyword);
+            }
+        }
+        return result.join(' ').replace(/\s+/g, ' ').trim();
+    }
+
+    let bestStart = -1;
+    let bestLen = 0;
+
+    for (let start = 0; start < baseTokens.length; start++) {
+        let len = 0;
+        while (start + len < baseTokens.length && len < suggestionTokens.length) {
+            const baseNorm = normalizeFragment(baseTokens[start + len]);
+            const suggestionNorm = normalizeFragment(suggestionTokens[len]);
+            if (
+                suggestionNorm.startsWith(baseNorm) ||
+                baseNorm.startsWith(suggestionNorm)
+            ) {
+                len++;
+            } else {
+                break;
+            }
+        }
+
+        if (len > bestLen) {
+            bestLen = len;
+            bestStart = start;
         }
     }
 
-    return (
-        <div className={`searchbar ${inline ? 'searchbar--inline' : ''} ${showSuggestions ? 'is-open' : ''}`}>
-            <form onSubmit={submit} className="searchbar__form">
-                <div className="searchbar__field">
-                    <input
-                        ref={inputRef}
-                        type="search"
-                        placeholder="Search a country or city..."
-                        value={q}
-                        onChange={handleChange}
-                        onFocus={handleFocus}
-                        onBlur={handleBlur}
-                        onKeyDown={onKeyDown}
-                        aria-autocomplete="list"
-                        aria-expanded={showSuggestions}
-                    />
-                    {q && (
-                        <button
-                            type="button"
-                            className="searchbar__clear"
-                            aria-label="Clear"
-                            onMouseDown={(e) => e.preventDefault()}   // keep focus
-                            onClick={() => {
-                                clearGeo(); 
-                                setQ('');
-                                setDirty(false);
-                                setPreviewResult(null);
-                            }}
-                        >
-                            ×
-                        </button>
-                    )}
+    const resultTokens: string[] = [];
 
-                    {showSuggestions && (
-                        <div className="searchbar__panel" role="listbox">
-                            {/* Countries (API + inferred from city matches) */}
-                            {countryPills.length > 0 && (
-                                <div className="searchbar__group">
-                                    <div className="searchbar__group-title">Countries</div>
-                                    <ul className="searchbar__list">
-                                        {countryPills.map((country, idx) => {
-                                            const code = countryIsoOf(country);
-                                            const globalIndex = idx; // first block
-                                            const isActive = active === globalIndex;
-                                            return (
-                                                <li key={`country-${country.id}`}>
-                                                    <button
-                                                        type="button"
-                                                        role="option"
-                                                        aria-selected={isActive}
-                                                        className={`searchbar__row ${isActive ? 'is-active' : ''}`}
-                                                        onMouseDown={handleSuggestionMouseDown}
-                                                        onMouseEnter={() => setActive(globalIndex)}
-                                                        onClick={() => selectCountry(country)}
-                                                    >
-                                                        <span className="searchbar__row-main">{country.name}</span>
-                                                        {code && <span className="searchbar__chip">{code}</span>}
-                                                    </button>
-                                                </li>
-                                            );
-                                        })}
-                                    </ul>
-                                </div>
-                            )}
+    if (bestLen > 0) {
+        resultTokens.push(...baseTokens.slice(0, bestStart));
+        resultTokens.push(suggestion);
+        resultTokens.push(...baseTokens.slice(bestStart + bestLen));
+    } else if (baseTokens.length > 0) {
+        resultTokens.push(...baseTokens);
+        const suggestionNorm = normalizeFragment(suggestion);
+        if (!resultTokens.some(tok => normalizeFragment(tok) === suggestionNorm)) {
+            resultTokens.push(suggestion);
+        }
+    } else {
+        resultTokens.push(suggestion);
+    }
 
-                            {/* Cities (show country NAME under the city; ISO2 chip on right) */}
-                            {cityPills.length > 0 && (
-                                <div className="searchbar__group">
-                                    <div className="searchbar__group-title">Cities</div>
-                                    <ul className="searchbar__list">
-                                        {cityPills.map((city, idx) => {
-                                            const globalIndex = countryPills.length + idx;
-                                            const isActive = active === globalIndex;
-                                            const cName = countryNameOf(city);
-                                            const cIso = countryIsoOf(city);
-                                            return (
-                                                <li key={`city-${city.id}`}>
-                                                    <button
-                                                        type="button"
-                                                        role="option"
-                                                        aria-selected={isActive}
-                                                        className={`searchbar__row ${isActive ? 'is-active' : ''}`}
-                                                        onMouseDown={handleSuggestionMouseDown}
-                                                        onMouseEnter={() => setActive(globalIndex)}
-                                                        onClick={() => selectCity(city)}
-                                                    >
-                                                        <span className="searchbar__row-col">
-                                                            <span className="searchbar__row-main">{city.name}</span>
-                                                            {cName && <span className="searchbar__row-sub">{cName}</span>}
-                                                        </span>
-                                                        {cIso && <span className="searchbar__chip">{cIso}</span>}
-                                                    </button>
-                                                </li>
-                                            );
-                                        })}
-                                    </ul>
-                                </div>
-                            )}
-                        </div>
-                    )}
-                </div>
-                <button
-                    ref={actionRef}
-                    type="submit"
-                    className="searchbar__submit"
-                >
-                    {isPreviewing && dirty ? 'Searching…' : 'Search'}
-                </button>
-            </form>
+    if (tailTokens.length > 0) {
+        for (const keyword of tailTokens) {
+            const norm = normalizeFragment(keyword);
+            if (!resultTokens.some(tok => normalizeFragment(tok) === norm)) {
+                resultTokens.push(keyword);
+            }
+        }
+    }
 
-            {showAmbiguity && (
-                <div className="searchbar__status">
-                    {previewResult?.kind === ScopeKind.CityInCountry
-                        ? 'Select a city to continue'
-                        : 'Refine your search to choose a location'}
-                </div>
-            )}
-        </div>
-    );
+    return resultTokens.join(' ').replace(/\s+/g, ' ').trim();
 }
+
+function capturedKeywords(pr: PreviewResponse | null): string {
+    return (pr?.nonGeoKeywords ?? []).filter(Boolean).join(' ').trim();
+}
+
+function cityPhrase(candidate: PreviewGeoCandidate): string {
+    const name = (candidate.name ?? '').trim();
+    const country = normalizeCountryName(candidate.countryIso2, candidate.countryName);
+    if (!name) return country || '';
+    const nameLower = name.toLowerCase();
+    if (country && !nameLower.includes(country.toLowerCase())) {
+        return `${name} ${country}`.trim();
+    }
+    return name;
+}
+
+
+function countryPhrase(candidate: PreviewGeoCandidate): string {
+    const display = normalizeCountryName(candidate.countryIso2, candidate.name ?? candidate.countryName);
+    if (display) return display;
+    const iso = (candidate.countryIso2 ?? candidate.countryIso3 ?? candidate.id ?? '').trim();
+    return iso;
+}
+
+
+// --- Smart geo replacement ----------------------------------------------------
+function tokensEqualLoose(a: string, b: string): boolean {
+    const A = normalizeFragment(a);
+    const B = normalizeFragment(b);
+    if (!A || !B) return false;
+    // exact, or prefix-of-each-other to allow incompletes: "phili" ~ "philippines"
+    return A === B || A.startsWith(B) || B.startsWith(A);
+}
+
+function isIsoCodeMatch(token: string, iso2?: string | null, iso3?: string | null): boolean {
+    const t = normalizeFragment(token);
+    if (!t) return false;
+    const i2 = normalizeFragment(iso2 ?? '');
+    const i3 = normalizeFragment(iso3 ?? '');
+    return t === i2 || t === i3;
+}
+
+
+function finalizeWithTail(text: string, keywordTail?: string): string {
+    const tailTokens = (keywordTail ?? '').split(whitespaceSplitter).filter(Boolean);
+    const resultTokens = splitTokens(text);
+
+    // normalized copies for fuzzy (prefix) dedupe
+    const resultNorms = resultTokens.map(normalizeFragment);
+
+    for (const tok of tailTokens) {
+        const n = normalizeFragment(tok);
+        // Skip if tail token equals OR is a prefix of any existing token,
+        // or any existing token is a prefix of the tail token.
+        const overlaps = resultNorms.some(rt => rt === n || rt.startsWith(n) || n.startsWith(rt));
+        if (overlaps) continue;
+
+        resultTokens.push(tok);
+        resultNorms.push(n);
+    }
+
+    return resultTokens.join(' ').replace(/\s+/g, ' ').trim();
+}
+
+
+/**
+ * Replace the best matching contiguous window of the input with the full geo phrase.
+ * Rules:
+ *  - If input token count equals geo token count → replace the whole input.
+ *  - Else if coverage >= 40% (loose token equality or ISO code equivalence) → replace that window.
+ *  - Else fall back to legacy mergeSuggestion behavior.
+ */
+function applyGeoSuggestion(
+    input: string,
+    phrase: string,
+    keywordTail: string | undefined,
+    candidate: PreviewGeoCandidate
+): string {
+    const baseTokens = splitTokens(input);
+    const suggestionTokens = splitTokens(phrase);
+    const S = suggestionTokens.length;
+    if (S === 0) return mergeSuggestion(input, phrase, keywordTail);
+
+    const iso2 = candidate.countryIso2 ?? null;
+    const iso3 = candidate.countryIso3 ?? null;
+
+    // If the entire query looks like just the geo (same token count), fully replace
+    if (baseTokens.length === S) {
+        return phrase.trim();
+    }
+
+    // Scan all possible windows of length up to S and measure coverage
+    const THRESHOLD = 0.4;
+    let bestStart = -1;
+    let bestCoverage = 0;
+    let bestLen = 0;
+
+    for (let start = 0; start < baseTokens.length; start++) {
+        let matchCount = 0;
+        let len = 0;
+        while (start + len < baseTokens.length && len < S) {
+            const bt = baseTokens[start + len];
+            const st = suggestionTokens[len];
+            if (tokensEqualLoose(bt, st) || isIsoCodeMatch(bt, iso2, iso3)) {
+                matchCount++;
+            }
+            len++;
+        }
+        const coverage = matchCount / S;
+        if (coverage > bestCoverage) {
+            bestCoverage = coverage;
+            bestStart = start;
+            bestLen = Math.min(S, baseTokens.length - start);
+        }
+    }
+
+    if (bestStart >= 0 && bestCoverage >= THRESHOLD) {
+        const replaced = [
+            ...baseTokens.slice(0, bestStart),
+            phrase,
+            ...baseTokens.slice(bestStart + bestLen)
+        ].join(' ');
+        return finalizeWithTail(replaced, keywordTail);
+    }
+
+    // Fallback: legacy behavior (keeps partially-typed tails if we couldn't reach 40%)
+    return mergeSuggestion(input, phrase, keywordTail);
+}
+function removeWindowOnce(tokens: string[], windowTokens: string[]): string[] {
+    if (windowTokens.length === 0) return tokens;
+    for (let i = 0; i <= tokens.length - windowTokens.length; i++) {
+        let ok = true;
+        for (let j = 0; j < windowTokens.length; j++) {
+            if (!tokensEqualLoose(tokens[i + j], windowTokens[j])) { ok = false; break; }
+        }
+        if (ok) {
+            return [...tokens.slice(0, i), ...tokens.slice(i + windowTokens.length)];
+        }
+    }
+    return tokens;
+}
+
+function countryTokensFromPreview(pr: PreviewResponse | null): string[] {
+    if (!pr) return [];
+    // Prefer the country of the top city; else the top country match
+    const city = (pr.cityMatches && pr.cityMatches[0]) || null;
+    const countryIso2 =
+        city?.countryIso2
+        ?? pr.outlineIso2
+        ?? (pr.diagnostics?.['chosenIso2'] as string | undefined)
+        ?? pr.countryMatches?.[0]?.countryIso2
+        ?? null;
+
+
+    const countryName =
+        normalizeCountryName(countryIso2 ?? undefined,
+            city?.countryName
+            ?? (pr.countryMatches && pr.countryMatches[0]?.name)
+            ?? null);
+
+    return splitTokens(countryName);
+}
+
+function sanitizeQueryForApi(displayQ: string, pr: PreviewResponse | null): string {
+    // Start from the full display text (e.g., "San Jose Philippines sports")
+    let tokens = splitTokens(displayQ);
+
+    // Remove the *country words* (e.g., ["Philippines"])
+    const cTokens = countryTokensFromPreview(pr);
+    tokens = removeWindowOnce(tokens, cTokens);
+
+    // Also drop raw ISO tokens if the user typed them in q
+    const iso2 = (
+        pr?.outlineIso2
+        ?? (pr?.diagnostics?.['chosenIso2'] as string | undefined)
+        ?? pr?.cityMatches?.[0]?.countryIso2
+        ?? pr?.countryMatches?.[0]?.countryIso2
+        ?? ''
+    ).toUpperCase();
+
+
+    const iso3 = ((pr?.cityMatches && pr.cityMatches[0]?.countryIso3)
+        ?? (pr?.countryMatches && pr.countryMatches[0]?.countryIso3)
+        ?? '').toUpperCase();
+
+    tokens = tokens.filter(t => !isIsoCodeMatch(t, iso2, iso3));
+
+    return tokens.join(' ');
+}
+function iso2FromPreview(pr: PreviewResponse | null): string | undefined {
+        const iso = (
+                pr?.outlineIso2
+                ?? (pr?.diagnostics?.['chosenIso2'] as string | undefined)
+                ?? pr?.cityMatches?.[0]?.countryIso2
+                ?? pr?.countryMatches?.[0]?.countryIso2
+                ?? ''
+            ).toUpperCase();
+        return iso || undefined;
+    }
+function normalizeCountryName(iso2?: string | null, name?: string | null): string {
+    const iso = (iso2 ?? '').toUpperCase();
+    const raw = (name ?? '').trim();
+
+    // Match old long forms and "North Macedonia" too
+    const looksLikeFYROM =
+        /former\s+yugoslav/i.test(raw) && /macedonia/i.test(raw);
+    const looksLikeNorth =
+        /north\s+macedonia/i.test(raw);
+
+    if (iso === 'MK' || looksLikeFYROM || looksLikeNorth) {
+        return 'Macedonia';
+    }
+    return raw;
+}
+

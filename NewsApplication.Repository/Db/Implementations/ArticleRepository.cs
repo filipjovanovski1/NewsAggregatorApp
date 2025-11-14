@@ -1,6 +1,7 @@
 ﻿using Microsoft.EntityFrameworkCore;
 using NewsApplication.Domain.Cache;
 using NewsApplication.Domain.DomainModels;
+using NewsApplication.Domain.Helpers;
 using NewsApplication.Repository.Db;
 using NewsApplication.Repository.Db.Interfaces;
 using Npgsql;
@@ -124,6 +125,9 @@ public sealed class ArticleRepository : IArticleRepository
             await _db.SaveChangesAsync(ct);
         }
 
+        await _db.ArticleCacheItems
+           .Where(i => i.ArticleCacheId == cache.Id)
+           .ExecuteDeleteAsync(ct);
 
         if (items.Count > 0)
         {
@@ -149,6 +153,62 @@ public sealed class ArticleRepository : IArticleRepository
         return cache;
     }
 
+    public async Task<bool> PruneDuplicateTitlesForCacheAsync(string scopeKey, int page, CancellationToken ct = default)
+    {
+        var cacheId = await _db.ArticleCaches
+            .Where(c => c.ScopeKey == scopeKey && c.Page == page)
+            .Select(c => (Guid?)c.Id)
+            .FirstOrDefaultAsync(ct);
+
+        if (cacheId is null)
+            return false;
+
+        var items = await (
+            from i in _db.ArticleCacheItems
+            where i.ArticleCacheId == cacheId
+            join a in _db.Articles on i.ArticleId equals a.ArticleId
+            orderby i.Position ?? int.MaxValue, i.ArticleId
+            select new { i.ArticleId, a.Title }
+        ).ToListAsync(ct);
+
+        if (items.Count <= 1)
+            return false;
+
+        var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        var toRemove = new List<string>();
+
+        foreach (var item in items)
+        {
+            var normalized = TitleNormalizer.Normalize(item.Title);
+            if (!seen.Add(normalized))
+                toRemove.Add(item.ArticleId);
+        }
+
+        if (toRemove.Count == 0)
+            return false;
+
+        var distinctRemovals = toRemove.Distinct().ToArray();
+
+        await _db.ArticleCacheItems
+            .Where(i => i.ArticleCacheId == cacheId && distinctRemovals.Contains(i.ArticleId))
+            .ExecuteDeleteAsync(ct);
+
+        var stillLinked = await _db.ArticleCacheItems
+            .Where(i => distinctRemovals.Contains(i.ArticleId))
+            .Select(i => i.ArticleId)
+            .Distinct()
+            .ToListAsync(ct);
+
+        var orphanIds = distinctRemovals.Except(stillLinked, StringComparer.Ordinal).ToArray();
+        if (orphanIds.Length > 0)
+        {
+            await _db.Articles
+                .Where(a => orphanIds.Contains(a.ArticleId))
+                .ExecuteDeleteAsync(ct);
+        }
+
+        return true;
+    }
 
     // -----------------------------
     //  GetNextPageTokenForAsync(scopeKey, page)
@@ -174,7 +234,7 @@ public sealed class ArticleRepository : IArticleRepository
                          WHERE ""ExpiresAt"" < now();";
         return await _db.Database.ExecuteSqlRawAsync(sql, ct);
     }
-   
+
     // -----------------------------
     //  DeleteOrphanArticlesAsync(olderThan)
     //  - Remove Articles with no ArticleCacheItem references (with safety window)
@@ -191,19 +251,51 @@ public sealed class ArticleRepository : IArticleRepository
         )
         AND a.""InsertedAt"" < (now() - {safetyWindow});", ct);
     }
-    // Count distinct articles across all cached pages for a scope
+    // Count distinct article titles across all cached pages for a scope
     public async Task<int> CountDistinctForScopeAsync(string scopeKey, CancellationToken ct = default)
     {
-        return await _db.ArticleCacheItems
-            .Where(i => i.ArticleCache.ScopeKey == scopeKey)
-            .Select(i => i.ArticleId)
-            .Distinct()
-            .CountAsync(ct);
+        var titles = await (
+            from i in _db.ArticleCacheItems
+            where i.ArticleCache.ScopeKey == scopeKey
+                && i.ArticleCache.ExpiresAt > DateTimeOffset.UtcNow
+            join a in _db.Articles on i.ArticleId equals a.ArticleId
+            select a.Title
+        ).ToListAsync(ct);
+
+        var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        foreach (var title in titles)
+        {
+            var normalized = TitleNormalizer.Normalize(title);
+            seen.Add(normalized);
+        }
+
+        return seen.Count;
+    }
+
+    public async Task<List<string?>> GetTitlesForScopeAsync(string scopeKey, CancellationToken ct = default)
+    {
+        return await (
+            from i in _db.ArticleCacheItems
+            where i.ArticleCache.ScopeKey == scopeKey
+                && i.ArticleCache.ExpiresAt > DateTimeOffset.UtcNow
+            join a in _db.Articles on i.ArticleId equals a.ArticleId
+            select a.Title
+        ).ToListAsync(ct);
+    }
+
+    public async Task<int> GetHighestCachedPageAsync(string scopeKey, CancellationToken ct = default)
+    {
+        var maxPage = await _db.ArticleCaches
+            .Where(c => c.ScopeKey == scopeKey && c.ExpiresAt > DateTimeOffset.UtcNow)
+            .Select(c => (int?)c.Page)
+            .MaxAsync(ct);
+
+        return maxPage ?? 0;
     }
 
     // Flat feed: order by Page ASC, Position ASC, then PublishedTime DESC
-    public async Task<IReadOnlyList<(string ArticleId, DateTime Published, int Page, int? Position)>>
-        GetFlatFeedAsync(string scopeKey, int takeUpTo, CancellationToken ct = default)
+    public async Task<IReadOnlyList<(string ArticleId, string? Title, DateTime Published, int Page, int? Position)>>
+         GetFlatFeedAsync(string scopeKey, int takeUpTo, CancellationToken ct = default)
     {
         var q =
             from i in _db.ArticleCacheItems
@@ -211,11 +303,11 @@ public sealed class ArticleRepository : IArticleRepository
             && i.ArticleCache.ExpiresAt > DateTimeOffset.UtcNow
             join a in _db.Articles on i.ArticleId equals a.ArticleId
             orderby i.ArticleCache.Page ascending, i.Position ascending, a.PublishedTime descending
-            select new { i.ArticleId, a.PublishedTime, i.ArticleCache.Page, i.Position };
+            select new { i.ArticleId, a.Title, a.PublishedTime, i.ArticleCache.Page, i.Position };
 
 
         return await q.Take(takeUpTo)
-            .Select(x => new ValueTuple<string, DateTime, int, int?>(x.ArticleId, x.PublishedTime, x.Page, x.Position))
+            .Select(x => new ValueTuple<string, string?, DateTime, int, int?>(x.ArticleId, x.Title, x.PublishedTime, x.Page, x.Position))
             .ToListAsync(ct);
     }
 

@@ -48,7 +48,7 @@ export default function ArticleOverlay({
                 <div className="overlay-header">
                     <h3>{title ?? 'Articles'}</h3>
                     <div className="overlay-header-right">
-                        <span className="count">Page {page}/{totalPages} · {totalNum} total</span>
+                        <span className="count">Page {page}/{totalPages}</span>
                         <button className="close" onClick={onClose} aria-label="Close">×</button>
                     </div>
                 </div>

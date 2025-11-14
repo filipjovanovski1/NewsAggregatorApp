@@ -1,5 +1,5 @@
 ﻿import { useCallback, useEffect, useState } from 'react';
-import SearchBar from './components/SearchBar';
+import SearchBar, { type GeoPickContext } from './components/SearchBar';
 import GlobeView from './components/GlobeView';
 import ArticleOverlay from './components/ArticleOverlay';
 import type { ArticleDto } from './types';
@@ -106,7 +106,7 @@ export default function App() {
     );
 
     // SearchBar submit → real search (unambiguous or composite keyword-only)
-    async function onSearch(q: string) {
+        async function onSearch(q: string, opts?: { countryIso2?: string }) {
         const trimmed = q.trim();
         if (!trimmed) return;
 
@@ -115,7 +115,11 @@ export default function App() {
             setCityMarkers([]);          // <-- new: remove batch markers from CityInCountry preview
             // (No need to clear highlightIso2/cityMarker here; resolveAndLoad will set them.)
 
-            await resolveAndLoad({ q: trimmed });
+            const body: Parameters<typeof resolveScope>[0] =
+                              opts?.countryIso2
+                                    ? { q: trimmed, country: { iso2: opts.countryIso2.toUpperCase() } }
+                                : { q: trimmed };
+                        await resolveAndLoad(body);
         } catch (err) {
             console.error(err);
         }
@@ -171,14 +175,18 @@ export default function App() {
         }
     }
 
-    const handlePreviewCity = useCallback(
-        (candidate: PreviewGeoCandidate, keywords?: string) => {
+    const handleCommitCity = useCallback(
+        (candidate: PreviewGeoCandidate, context?: GeoPickContext) => {
             if (!candidate?.id) return;
 
             const iso2 = candidate.countryIso2?.toUpperCase() ?? '';
             const lat = candidate.lat;
             const lng = candidate.lng;
             const focusHint = isFiniteNumber(lat) && isFiniteNumber(lng) ? { lat, lng } : null;
+
+            const keywordTail = context?.keywordTail?.trim();
+            const fullText = context?.fullText?.trim();
+            const queryText = keywordTail || fullText || undefined;
 
             // Build the city request with keywords if present
             const cityRequest = {
@@ -188,7 +196,7 @@ export default function App() {
                     countryIso2: iso2 || candidate.countryIso2 || ''
                 },
                 // Add keywords to the request if they exist
-                ...(keywords ? { q: keywords } : {})
+                ...(queryText ? { q: queryText } : {})
             };
 
             resolveAndLoad(
@@ -205,8 +213,8 @@ export default function App() {
         [resolveAndLoad]
     );
 
-    const handlePreviewCountry = useCallback(
-        (candidate: PreviewGeoCandidate, keywords?: string) => {
+    const handleCommitCountry = useCallback(
+        (candidate: PreviewGeoCandidate, context?: GeoPickContext) => {
             const iso2 = (candidate.countryIso2 ?? candidate.id ?? '').toUpperCase();
             if (!iso2) return;
 
@@ -214,6 +222,10 @@ export default function App() {
             const lat = candidate.lat;
             const lng = candidate.lng;
             const focusHint = isFiniteNumber(lat) && isFiniteNumber(lng) ? { lat, lng } : null;
+
+            const keywordTail = context?.keywordTail?.trim();
+            const fullText = context?.fullText?.trim();
+            const queryText = keywordTail || fullText || undefined;
 
             // Build the country request with keywords if present
             const countryRequest = {
@@ -223,7 +235,7 @@ export default function App() {
                     name: candidate.name ?? iso2
                 },
                 // Add keywords to the request if they exist
-                ...(keywords ? { q: keywords } : {})
+                ...(queryText ? { q: queryText } : {})
             };
 
             resolveAndLoad(
@@ -239,14 +251,42 @@ export default function App() {
         },
         [resolveAndLoad]
     );
-    useEffect(() => {
-        // TEMP: force a visible outline + pin 2s after load
-        const t = setTimeout(() => {
-            setHighlightIso2('PH'); // Philippines — should outline in lime
-            setCityMarker({ lat: 14.5995, lng: 120.9842 }); // Manila
-        }, 2000);
-        return () => clearTimeout(t);
-    }, []);
+   
+    const previewCitySelection = useCallback(
+        (candidate: PreviewGeoCandidate) => {
+            const iso2 = candidate.countryIso2?.toUpperCase() ?? null;
+            setHighlightIso2(iso2);
+            setCityMarkers([]);
+
+            const lat = candidate.lat;
+            const lng = candidate.lng;
+            if (isFiniteNumber(lat) && isFiniteNumber(lng)) {
+                setCityMarker({ lat, lng });
+                setFocus({ lat, lng, altitude: 1.6 });
+            } else {
+                setCityMarker(null);
+            }
+        },
+        []
+    );
+
+    const previewCountrySelection = useCallback(
+        (candidate: PreviewGeoCandidate) => {
+            const iso2 = (candidate.countryIso2 ?? candidate.id ?? '').toUpperCase() || null;
+            setHighlightIso2(iso2);
+            setCityMarker(null);
+            setCityMarkers([]);
+
+            const lat = candidate.lat;
+            const lng = candidate.lng;
+            if (isFiniteNumber(lat) && isFiniteNumber(lng)) {
+                setFocus({ lat, lng, altitude: 2.2 });
+            } else {
+                setFocus(null);
+            }
+        },
+        []
+    );
 
     return (
         <div className="app">
@@ -255,8 +295,10 @@ export default function App() {
                     inline
                     value={label}
                     onSearch={onSearch}
-                    onPickCity={handlePreviewCity}
-                    onPickCountry={handlePreviewCountry}
+                    onPickCity={handleCommitCity}
+                    onPickCountry={handleCommitCountry}
+                    onPreviewCity={previewCitySelection}
+                    onPreviewCountry={previewCountrySelection}
                     onAmbiguous={onAmbiguous}   // show geo for ambiguous
                     onClearGeo={onClearGeo}     // clear geo for composite
                 />

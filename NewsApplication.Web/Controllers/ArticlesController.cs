@@ -1,4 +1,5 @@
 ﻿using Microsoft.AspNetCore.Mvc;
+using NewsApplication.Domain.Helpers;
 using NewsApplication.Repository.Db.Interfaces;
 using NewsApplication.Service.Interfaces.Ingestion;
 
@@ -44,8 +45,7 @@ public sealed class ArticlesController : ControllerBase
 
         while (have < need)
         {
-            // Heuristic: every provider page yields up to 10 items.
-            var nextProviderPage = Math.Max(1, (have / ProviderPageSize) + 1);
+            var nextProviderPage = await repo.GetHighestCachedPageAsync(scopeKey, ct) + 1;
             await ingest.FetchAndCachePageAsync(scopeKey, nextProviderPage, ProviderPageSize, ct);   // writes cache + sets 10m TTL :contentReference[oaicite:3]{index=3}
 
             var h2 = await repo.CountDistinctForScopeAsync(scopeKey, ct);
@@ -54,14 +54,19 @@ public sealed class ArticlesController : ControllerBase
         }
 
         // 2) Read a flat feed ordered by (Page ASC, Position ASC, Published DESC), then distinct-by-id, then slice. :contentReference[oaicite:4]{index=4}
-        var upTo = Math.Max(need, have);
+        var upTo = Math.Max(need, have) + ProviderPageSize;
         var flat = await repo.GetFlatFeedAsync(scopeKey, upTo, ct);                                  // :contentReference[oaicite:5]{index=5}
 
-        var seen = new HashSet<string>(StringComparer.Ordinal);
+        var seenTitles = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         var orderedIds = new List<string>();
         foreach (var f in flat)
-            if (seen.Add(f.ArticleId)) orderedIds.Add(f.ArticleId);
+        {
+            var normalizedTitle = TitleNormalizer.Normalize(f.Title);
+            if (!seenTitles.Add(normalizedTitle))
+                continue;
 
+            orderedIds.Add(f.ArticleId);
+        }
         var total = orderedIds.Count;
         var slice = orderedIds.Skip(offset).Take(UiPageSize).ToList();
         var rows = await repo.LoadArticlesByIdsAsync(slice, ct);                                  // :contentReference[oaicite:6]{index=6}
