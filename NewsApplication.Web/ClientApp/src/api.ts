@@ -53,7 +53,7 @@ export type ResolveScopeResponse = {
 export type ResolveScopeBody =
   | { q: string }
     | { city: { id: string; name: string; countryIso2: string }; q?: string }
-    | { country: { iso2: string; iso3?: string; name: string }; q?: string };
+    | { country: { iso2: string; iso3?: string; name?: string }; q?: string };
 
 export type ReverseScopeBody = { lat: number; lng: number };
 

@@ -180,10 +180,11 @@ export default function SearchBar({
         if (!candidate?.id) return;
         const tail = capturedKeywords(previewResult);
         const phrase = cityPhrase(candidate);
-        const text = applyGeoSuggestion(trimmed, phrase, tail, candidate);
+        const { text, keywordTail: prunedTail } = applyGeoSuggestion(trimmed, phrase, tail, candidate);
+        const nextTail = prunedTail ?? '';
 
-        setPendingPick({ t: 'city', v: candidate, k: tail, text });
-        onPreviewCity?.(candidate, tail);
+        setPendingPick({ t: 'city', v: candidate, k: nextTail, text });
+        onPreviewCity?.(candidate, prunedTail);
         setDirty(false);
         setPreviewResult(null);
         // was: setQ(candidate.name ?? '');
@@ -196,10 +197,11 @@ export default function SearchBar({
         if (!candidate?.id) return;
         const tail = capturedKeywords(previewResult);
         const phrase = countryPhrase(candidate);
-        const text = applyGeoSuggestion(trimmed, phrase, tail, candidate);
+        const { text, keywordTail: prunedTail } = applyGeoSuggestion(trimmed, phrase, tail, candidate);
+        const nextTail = prunedTail ?? '';
 
-        setPendingPick({ t: 'country', v: candidate, k: tail, text });
-        onPreviewCountry?.(candidate, tail);     // NEW
+        setPendingPick({ t: 'country', v: candidate, k: nextTail, text });
+        onPreviewCountry?.(candidate, prunedTail);     // NEW
         setDirty(false);
         setPreviewResult(null);
         // was: setQ(candidate.name ?? '');
@@ -211,11 +213,11 @@ export default function SearchBar({
 
     const submit = async (e: FormEvent<HTMLFormElement>) => {
         e.preventDefault();
-        const text = trimmed;
+        let text = trimmed;
         hasInteractedRef.current = true;
         if (!text && !pendingPick) return;
 
-        // If a pill was staged (via keyboard Enter), commit it and stop.
+        // If a pill was staged (via keyboard Enter), commit it before continuing.
         if (pendingPick) {
             clearGeo();
             const { t, v, k, text: stagedText } = pendingPick;
@@ -224,6 +226,7 @@ export default function SearchBar({
             setDirty(false);
             setPreviewResult(null);
             setQ(nextQ);
+            text = nextQ;
 
             const keywordTail = k.trim().length ? k.trim() : undefined;
             const context: GeoPickContext = {
@@ -237,7 +240,6 @@ export default function SearchBar({
             inputRef.current?.focus();
             refocusNoScroll();
             setFocused(true);
-            return;
         }
 
 
@@ -301,8 +303,35 @@ export default function SearchBar({
         }
 
         if (pr.kind === ScopeKind.CityInCountry && pr.isAmbiguous) {
-            clearGeo();
             const iso = pr.outlineIso2 ?? (pr.diagnostics && (pr.diagnostics['chosenIso2'] as string | undefined)) ?? null;
+            const rawCities = pr.cityMatches ?? [];
+            const inCountryRaw = iso
+                ? rawCities.filter(c => up(c.countryIso2) === up(iso))
+                : rawCities;
+            const inCountryUnique = dedupeBy(inCountryRaw, x => x.id ?? `${x.name}|${up(x.countryIso2)}`);
+
+            if (inCountryUnique.length === 1) {
+                const chosenCity = inCountryUnique[0];
+                const tail = capturedKeywords(pr);
+                const phrase = cityPhrase(chosenCity);
+                const { text: resolvedText, keywordTail: prunedTail } = applyGeoSuggestion(text, phrase, tail, chosenCity);
+                const keywordTail = prunedTail?.trim() ? prunedTail.trim() : undefined;
+                const context: GeoPickContext = {
+                    fullText: resolvedText.trim(),
+                    ...(keywordTail ? { keywordTail } : {}),
+                };
+
+                onPickCity?.(chosenCity, context);
+                setQ(resolvedText);
+                setDirty(false);
+                setPreviewResult(null);
+                inputRef.current?.focus();
+                refocusNoScroll();
+                setFocused(true);
+                return;
+            }
+
+            clearGeo();
             const inCountry = iso
                 ? cities.filter(c => (c.countryIso2 ?? '').toUpperCase() === iso.toUpperCase())
                 : cities;
@@ -466,12 +495,14 @@ export default function SearchBar({
                     if (pick) {
                         const tail = capturedKeywords(previewResult);
                         const phrase = pick.t === 'city' ? cityPhrase(pick.v) : countryPhrase(pick.v);
-                        const textValue = applyGeoSuggestion(trimmed, phrase, tail, pick.v);
-                        setPendingPick({ ...pick, k: tail, text: textValue });
+                        const { text: textValue, keywordTail: prunedTail } =
+                            applyGeoSuggestion(trimmed, phrase, tail, pick.v);
+                        const nextTail = prunedTail ?? '';
+                        setPendingPick({ ...pick, k: nextTail, text: textValue });
                         if (pick.t === 'city') {
-                            onPreviewCity?.(pick.v, tail);
+                            onPreviewCity?.(pick.v, prunedTail);
                         } else {
-                            onPreviewCountry?.(pick.v, tail);
+                            onPreviewCountry?.(pick.v, prunedTail);
                         }
                         setDirty(false);
                         setPreviewResult(null);
@@ -606,11 +637,32 @@ export default function SearchBar({
 
 const whitespaceSplitter = /\s+/g;
 
-function labelFor(x: PreviewGeoCandidate) {
+function labelFor(x: PreviewGeoCandidate, kind?: 'city' | 'country') {
     const iso = (x.countryIso2 ?? x.countryIso3 ?? "").trim();
-    const baseName = x.name ?? "";
-    const name = normalizeCountryName(x.countryIso2, baseName);
-    return iso ? `${name}, ${up(iso)}` : name;
+    const baseName = (x.name ?? "").trim();
+    const countryName = (x.countryName ?? "").trim();
+
+    const treatAsCountry =
+        kind === 'country' ||
+        (kind !== 'city' &&
+            baseName &&
+            countryName &&
+            normalizeFragment(baseName) === normalizeFragment(countryName));
+
+    if (treatAsCountry) {
+        const name = normalizeCountryName(x.countryIso2, baseName || countryName);
+        return iso ? `${name}, ${up(iso)}` : name;
+    }
+
+    if (baseName) {
+        return baseName;
+    }
+
+    // Fall back to a best-effort city phrase without normalizing
+    const phrase = cityPhrase(x);
+    if (phrase) return phrase;
+
+    return countryName || iso;
 }
 
 
@@ -629,11 +681,11 @@ function bestLabelFromPreview(pr: PreviewResponse | null): string | null {
         (chosenIso && cities.find(c => up(c.countryIso2 ?? "") === chosenIso)) ||
         (cities.length ? cities[0] : null);
 
-    if (topCity?.name) return labelFor(topCity);
+    if (topCity?.name) return labelFor(topCity, 'city');
 
     // Fall back to a country
     const countries = pr.countryMatches ?? [];
-    if (countries.length) return labelFor(countries[0]);
+    if (countries.length) return labelFor(countries[0], 'country');
 
     return null;
 }
@@ -760,6 +812,7 @@ function isIsoCodeMatch(token: string, iso2?: string | null, iso3?: string | nul
     return t === i2 || t === i3;
 }
 
+type GeoSuggestionResult = { text: string; keywordTail?: string };
 
 function finalizeWithTail(text: string, keywordTail?: string): string {
     const tailTokens = (keywordTail ?? '').split(whitespaceSplitter).filter(Boolean);
@@ -782,6 +835,47 @@ function finalizeWithTail(text: string, keywordTail?: string): string {
     return resultTokens.join(' ').replace(/\s+/g, ' ').trim();
 }
 
+function pruneKeywordTail(
+    keywordTail: string | undefined,
+    replacedTokens: string[],
+    candidate: PreviewGeoCandidate
+): string | undefined {
+    const tailTokens = (keywordTail ?? '').split(whitespaceSplitter).filter(Boolean);
+    if (tailTokens.length === 0) return undefined;
+
+    const replacedNorms = replacedTokens.map(normalizeFragment).filter(Boolean);
+    const isoNorms = [normalizeFragment(candidate.countryIso2), normalizeFragment(candidate.countryIso3)].filter(Boolean);
+    const countryLabel = normalizeCountryName(candidate.countryIso2, candidate.countryName);
+    const countryNorms = splitTokens(countryLabel).map(normalizeFragment).filter(Boolean);
+    const shouldDropMacedonia = countryNorms.includes('macedonia');
+    const considerIso = replacedTokens.length > 0;
+
+    const filtered = tailTokens.filter(tok => {
+        const norm = normalizeFragment(tok);
+        if (!norm) return false;
+
+        const matchesReplaced = replacedNorms.some(rt => rt === norm || rt.startsWith(norm) || norm.startsWith(rt));
+        if (matchesReplaced) return false;
+
+        if (considerIso) {
+            const matchesIso = isoNorms.some(iso => iso === norm || iso.startsWith(norm) || norm.startsWith(iso));
+            if (matchesIso) return false;
+        }
+
+        if (countryNorms.some(cn => cn === norm || cn.startsWith(norm) || norm.startsWith(cn))) {
+            return false;
+        }
+
+        if (shouldDropMacedonia && norm === 'macedonia') {
+            return false;
+        }
+
+        return true;
+    });
+
+    if (filtered.length === 0) return undefined;
+    return filtered.join(' ');
+}
 
 /**
  * Replace the best matching contiguous window of the input with the full geo phrase.
@@ -795,18 +889,27 @@ function applyGeoSuggestion(
     phrase: string,
     keywordTail: string | undefined,
     candidate: PreviewGeoCandidate
-): string {
+): GeoSuggestionResult {
     const baseTokens = splitTokens(input);
     const suggestionTokens = splitTokens(phrase);
     const S = suggestionTokens.length;
-    if (S === 0) return mergeSuggestion(input, phrase, keywordTail);
+
+    if (S === 0) {
+        const prunedTail = pruneKeywordTail(keywordTail, [], candidate);
+        const merged = mergeSuggestion(input, phrase, prunedTail);
+        return { text: merged, keywordTail: prunedTail };
+    }
 
     const iso2 = candidate.countryIso2 ?? null;
     const iso3 = candidate.countryIso3 ?? null;
 
     // If the entire query looks like just the geo (same token count), fully replace
     if (baseTokens.length === S) {
-        return phrase.trim();
+        const prunedTail = pruneKeywordTail(keywordTail, baseTokens, candidate);
+        return {
+            text: finalizeWithTail(phrase.trim(), prunedTail),
+            keywordTail: prunedTail,
+        };
     }
 
     // Scan all possible windows of length up to S and measure coverage
@@ -835,16 +938,25 @@ function applyGeoSuggestion(
     }
 
     if (bestStart >= 0 && bestCoverage >= THRESHOLD) {
+        const replacedTokens = baseTokens.slice(bestStart, bestStart + bestLen);
         const replaced = [
             ...baseTokens.slice(0, bestStart),
             phrase,
             ...baseTokens.slice(bestStart + bestLen)
         ].join(' ');
-        return finalizeWithTail(replaced, keywordTail);
+        const prunedTail = pruneKeywordTail(keywordTail, replacedTokens, candidate);
+        return {
+            text: finalizeWithTail(replaced, prunedTail),
+            keywordTail: prunedTail,
+        };
     }
 
     // Fallback: legacy behavior (keeps partially-typed tails if we couldn't reach 40%)
-    return mergeSuggestion(input, phrase, keywordTail);
+    const prunedTail = pruneKeywordTail(keywordTail, [], candidate);
+    return {
+        text: mergeSuggestion(input, phrase, prunedTail),
+        keywordTail: prunedTail,
+    };
 }
 function removeWindowOnce(tokens: string[], windowTokens: string[]): string[] {
     if (windowTokens.length === 0) return tokens;
@@ -859,11 +971,48 @@ function removeWindowOnce(tokens: string[], windowTokens: string[]): string[] {
     }
     return tokens;
 }
+function primaryCityFromPreview(pr: PreviewResponse | null): PreviewGeoCandidate | null {
+    if (!pr) return null;
 
+    const cities = pr.cityMatches ?? [];
+    if (cities.length === 0) return null;
+
+    const chosenIso = up(
+        (pr.outlineIso2 ?? (pr.diagnostics?.['chosenIso2'] as string | undefined) ?? '') || ''
+    );
+
+    if (chosenIso) {
+        const match = cities.find(c => up(c.countryIso2 ?? '') === chosenIso);
+        if (match) return match;
+    }
+
+    return cities[0] ?? null;
+}
+
+
+
+function cityTokensFromPreview(pr: PreviewResponse | null): string[] {
+    if (!pr) return [];
+
+    const chosenIso = up(
+        (pr.outlineIso2
+            ?? (pr.diagnostics && (pr.diagnostics['chosenIso2'] as string | undefined))
+            ?? '') || ''
+    );
+
+    const cities = pr.cityMatches ?? [];
+    const topCity =
+        (chosenIso && cities.find(c => up(c.countryIso2 ?? '') === chosenIso))
+        || (cities.length ? cities[0] : null);
+
+    if (!topCity) return [];
+
+    return splitTokens(cityPhrase(topCity));
+}
 function countryTokensFromPreview(pr: PreviewResponse | null): string[] {
     if (!pr) return [];
     // Prefer the country of the top city; else the top country match
-    const city = (pr.cityMatches && pr.cityMatches[0]) || null;
+    const city = primaryCityFromPreview(pr);
     const countryIso2 =
         city?.countryIso2
         ?? pr.outlineIso2
@@ -905,8 +1054,31 @@ function sanitizeQueryForApi(displayQ: string, pr: PreviewResponse | null): stri
 
     tokens = tokens.filter(t => !isIsoCodeMatch(t, iso2, iso3));
 
-    return tokens.join(' ');
+    const cityTokens = cityTokensFromPreview(pr);
+    if (cityTokens.length === 0) {
+        return tokens.join(' ');
+    }
+
+    const result: string[] = [];
+    const seen = new Set<string>();
+
+    for (const ct of cityTokens) {
+        const norm = normalizeFragment(ct);
+        if (!norm || seen.has(norm)) continue;
+        result.push(ct);
+        seen.add(norm);
+    }
+
+    for (const token of tokens) {
+        const norm = normalizeFragment(token);
+        if (!norm || seen.has(norm)) continue;
+        result.push(token);
+        seen.add(norm);
+    }
+
+    return result.join(' ');
 }
+
 function iso2FromPreview(pr: PreviewResponse | null): string | undefined {
         const iso = (
                 pr?.outlineIso2

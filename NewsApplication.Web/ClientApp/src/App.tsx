@@ -1,4 +1,4 @@
-﻿import { useCallback, useEffect, useState } from 'react';
+﻿import { useCallback, useEffect, useState} from 'react';
 import SearchBar, { type GeoPickContext } from './components/SearchBar';
 import GlobeView from './components/GlobeView';
 import ArticleOverlay from './components/ArticleOverlay';
@@ -14,6 +14,31 @@ import {
 } from './api';
 
 const UI_PAGE_SIZE = 6;
+
+const whitespaceSplitter = /\s+/;
+
+function sanitizeCityKeywords(
+    query: string | undefined,
+    candidate: PreviewGeoCandidate
+): string | undefined {
+    const raw = (query ?? '').trim();
+    if (!raw) return undefined;
+
+    const tokens = raw.split(whitespaceSplitter).map(tok => tok.trim()).filter(Boolean);
+    if (tokens.length === 0) return undefined;
+
+    const iso2 = candidate.countryIso2?.toUpperCase() ?? '';
+    const countryName = candidate.countryName ?? '';
+    const shouldDropMacedonia = iso2 === 'MK' || /macedonia/i.test(countryName);
+
+    const filtered = shouldDropMacedonia
+        ? tokens.filter(tok => tok.trim().toLowerCase() !== 'macedonia')
+        : tokens;
+
+    if (filtered.length === 0) return undefined;
+
+    return filtered.join(' ');
+}
 
 const isFiniteNumber = (value: number | null | undefined): value is number =>
     typeof value === 'number' && Number.isFinite(value);
@@ -186,7 +211,8 @@ export default function App() {
 
             const keywordTail = context?.keywordTail?.trim();
             const fullText = context?.fullText?.trim();
-            const queryText = keywordTail || fullText || undefined;
+            const rawQueryText = keywordTail || fullText || undefined;
+            const queryText = sanitizeCityKeywords(rawQueryText, candidate);
 
             // Build the city request with keywords if present
             const cityRequest = {
