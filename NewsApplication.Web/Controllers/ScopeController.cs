@@ -82,7 +82,7 @@ public sealed class ScopeController : ControllerBase
         return ascii;
     }
 
-    private static string CityScopeKey(string? cityName, string? countryIso2, string? query)
+    private static string CityScopeKey(string? cityName, string? countryIso2, string? localName, string? query)
     {
         var isoLower = (countryIso2 ?? string.Empty).Trim().ToLowerInvariant();
         var slugRoot = Slugify(cityName ?? string.Empty);
@@ -97,6 +97,12 @@ public sealed class ScopeController : ControllerBase
         var isoUpper = (countryIso2 ?? string.Empty).Trim().ToUpperInvariant();
         if (!string.IsNullOrWhiteSpace(isoUpper))
             segments.Add($"country:{isoUpper}");
+
+        if (!string.IsNullOrWhiteSpace(localName))
+        {
+            var encoded = Uri.EscapeDataString(localName.Trim());
+            segments.Add($"local:{encoded}");
+        }
 
         if (!string.IsNullOrWhiteSpace(query))
             segments.Add($"q:{query.Trim()}");
@@ -185,14 +191,24 @@ public sealed class ScopeController : ControllerBase
 
             var cityName = city?.Name ?? req.City.Name;
             var iso2 = (city?.CountryIso2 ?? req.City.CountryIso2 ?? "").ToUpperInvariant();
+            var localName = city?.LocalName;
+            if (city is not null && string.IsNullOrWhiteSpace(localName))
+            {
+                localName = await cityService.EnsureLocalNameAsync(city, ct);
+            }
 
             // fetch country dto once (for label + sanitizing)
             var countryDto = string.IsNullOrWhiteSpace(iso2) ? null : await countryService.GetByIdAsync(iso2, ct);
 
             // sanitize q against country
+            
             var cleanQ = SanitizeQueryForCountry(req.Q, iso2, countryDto?.Name, countryDto?.CountryIso3);
-
-            var scopeKey = CityScopeKey(cityName, iso2, cleanQ);
+            // If user provided no query, fall back to the city name so both Latin/local forms can be OR-ed downstream
+            if (string.IsNullOrWhiteSpace(cleanQ))
+            {
+                cleanQ = cityName;
+            }
+            var scopeKey = CityScopeKey(cityName, iso2, localName, cleanQ);
 
             var cityIdStr = !string.IsNullOrWhiteSpace(city?.Id) ? city!.Id : null;
 
@@ -263,10 +279,15 @@ public sealed class ScopeController : ControllerBase
                 var iso2 = (bestCity.CountryIso2 ?? "").ToUpperInvariant();
                 var countryDto = string.IsNullOrWhiteSpace(iso2) ? null : await countryService.GetByIdAsync(iso2, ct);
                 var cleanQ = SanitizeQueryForCountry(trimmed, iso2, countryDto?.Name, countryDto?.CountryIso3);
+                var localName = bestCity.LocalName;
+                if (string.IsNullOrWhiteSpace(localName))
+                {
+                    localName = await cityService.EnsureLocalNameAsync(bestCity, ct);
+                }
 
                 return Ok(new ResolveScopeResponse
                 {
-                    ScopeKey = CityScopeKey(bestCity.Name, iso2, cleanQ) + KwSuffix(keywords),
+                    ScopeKey = CityScopeKey(bestCity.Name, iso2, localName, cleanQ) + KwSuffix(keywords),
                     Kind       = "city",
                     Label      = await BuildCityLabelWithCountryNameAsync(countryService, bestCity.Name, iso2, ct),
                     CountryIso2 = iso2,
@@ -343,10 +364,16 @@ public sealed class ScopeController : ControllerBase
         if (city is not null)
         {
             var iso2 = (city.CountryIso2 ?? "").ToUpperInvariant();
-      
+            var localName = city.LocalName;
+            if (string.IsNullOrWhiteSpace(localName))
+            {
+                localName = await cityService.EnsureLocalNameAsync(city, ct);
+            }
+            var fallbackQ = city.Name;
+
             return Ok(new ResolveScopeResponse
             {
-                ScopeKey   = CityScopeKey(city.Name, iso2, null), // e.g., city:skopje-mk
+                ScopeKey = CityScopeKey(city.Name, iso2, localName, fallbackQ), // e.g., city:skopje-mk
                 Kind       = "city",
                 Label      = await BuildCityLabelWithCountryNameAsync(countryService, city.Name, iso2, ct),
                 CountryIso2 = iso2,

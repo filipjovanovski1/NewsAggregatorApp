@@ -17,6 +17,7 @@ namespace NewsApplication.Repository.Db.Configurations.ScopeHelpers
         public string CountryIso3 { get; set; } = default!;
         public double? Latitude { get; set; }
         public double? Longitude { get; set; }
+        public string? LocalName { get; set; }
         public double Score { get; set; }
     }
 }

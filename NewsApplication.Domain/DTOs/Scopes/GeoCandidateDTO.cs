@@ -31,6 +31,7 @@ namespace NewsApplication.Domain.DTOs.Scopes
         public string? CountryName { get; init; } // for cities
         public string? CountryIso2 { get; init; }
         public string? CountryIso3 { get; set; }
+        public string? LocalName { get; init; }
         public double? Lat { get; init; }
         public double? Lng { get; init; }
         public double Score { get; init; }

@@ -252,6 +252,7 @@ namespace NewsApplication.Service.Implementations
                         CountryIso2 = dto.CountryIso2,
                         CountryIso3 = dto.CountryIso3,
                         CountryName = dto.CountryName,
+                        LocalName = dto.LocalName,
                         Lat = dto.Lat,
                         Lng = dto.Lng,
                         Score = 1.0
@@ -295,6 +296,7 @@ namespace NewsApplication.Service.Implementations
                               CountryIso2 = dto.CountryIso2,
                               CountryIso3 = dto.CountryIso3,
                               CountryName = dto.CountryName,
+                              LocalName = dto.LocalName,
                               Lat = dto.Lat,
                               Lng = dto.Lng,
                               Score = 1.0
@@ -339,6 +341,7 @@ namespace NewsApplication.Service.Implementations
                             CountryIso2 = dto.CountryIso2,
                             CountryIso3 = dto.CountryIso3,
                             CountryName = dto.CountryName,
+                            LocalName = dto.LocalName,
                             Lat = dto.Lat,
                             Lng = dto.Lng,
                             Score = 1.0
@@ -612,6 +615,7 @@ namespace NewsApplication.Service.Implementations
                             Name = c.Name,
                             CountryIso2 = c.CountryIso2,
                             CountryName = c.CountryName,
+                            LocalName = c.LocalName,
                             Lat = c.Lat,
                             Lng = c.Lng,
                             Score = c.Score
@@ -802,6 +806,7 @@ namespace NewsApplication.Service.Implementations
                             CountryIso2 = co.CountryIso2,
                             CountryIso3 = co.CountryIso3,
                             CountryName = co.CountryName,
+                            LocalName = co.LocalName,
                             Lat = co.Lat,
                             Lng = co.Lng,
                             Score = 1.0
@@ -858,6 +863,7 @@ namespace NewsApplication.Service.Implementations
                                 CountryIso2 = city.CountryIso2,
                                 CountryIso3 = city.CountryIso3,
                                 CountryName = city.CountryName,
+                                LocalName = city.LocalName,
                                 Lat = city.Lat,
                                 Lng = city.Lng,
                                 Score = 1.0

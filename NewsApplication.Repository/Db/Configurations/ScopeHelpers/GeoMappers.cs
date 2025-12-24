@@ -16,6 +16,7 @@ namespace NewsApplication.Repository.Db.Configurations.ScopeHelpers
             CountryName = r.CountryName,
             CountryIso2 = r.CountryIso2?.ToUpperInvariant(),
             CountryIso3 = r.CountryIso3?.ToUpperInvariant(),   // NEW
+            LocalName = r.LocalName,
             Lat = r.Latitude,
             Lng = r.Longitude,
             Score = r.Score

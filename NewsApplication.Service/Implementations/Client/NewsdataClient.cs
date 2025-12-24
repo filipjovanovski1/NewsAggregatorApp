@@ -96,6 +96,9 @@ public sealed class NewsdataClient : INewsdataClient
             $"apikey={Uri.EscapeDataString(_opt.ApiKey)}"
         };
 
+        string? qTerm = null;
+        string? localTerm = null;
+
         // Newsdata typically uses numeric "page" OR token "nextPage" depending on endpoint/version.
         if (!string.IsNullOrWhiteSpace(pageToken))
         {
@@ -134,9 +137,33 @@ public sealed class NewsdataClient : INewsdataClient
                     qp.Add($"language={Uri.EscapeDataString(rawVal)}");
                     break;
                 case "q": // free-text search
-                    qp.Add($"q={Uri.EscapeDataString(rawVal)}");
+                    qTerm = string.IsNullOrWhiteSpace(qTerm) ? rawVal : $"{qTerm} {rawVal}";
+                    break;
+                case "local":
+                    localTerm = string.IsNullOrWhiteSpace(localTerm) ? rawVal : $"{localTerm} {rawVal}";
                     break;
             }
+        }
+        // inside BuildUrl after collecting localTerm and qTerm
+        string? combinedQ = null;
+        var terms = new[] { localTerm?.Trim(), qTerm?.Trim() }
+            .Where(s => !string.IsNullOrWhiteSpace(s))
+            .Select(s => s!)
+            .ToArray();
+
+        if (terms.Length == 1)
+        {
+            combinedQ = terms[0];
+        }
+        else if (terms.Length > 1)
+        {
+            // Explicit OR so Newsdata matches either local or Latin forms instead of concatenated text
+            combinedQ = $"({terms[0]}) OR ({terms[1]})";
+        }
+
+        if (!string.IsNullOrWhiteSpace(combinedQ))
+        {
+            qp.Add($"q={Uri.EscapeDataString(combinedQ)}");
         }
 
         // pageSize is not always supported by Newsdata (many endpoints fix size),

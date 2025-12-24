@@ -21,5 +21,7 @@ namespace NewsApplication.Domain.DomainModels
         public double Latitude { get; set; }
         public double Longitude { get; set; }
 
+        public string? LocalName { get; set; }
+
     }
 }

@@ -4,8 +4,12 @@ using NewsApplication.Service.Interfaces;
 using System;
 using System.Collections.Generic;
 using System.Linq;
-using System.Text;
+using System.Net.Http;
+using System.Text.Json;
+using System.Threading;
 using System.Threading.Tasks;
+using System.Globalization;
+using Microsoft.Extensions.Logging;
 
 namespace NewsApplication.Service.Implementations
 {
@@ -13,8 +17,13 @@ namespace NewsApplication.Service.Implementations
     {
         private readonly ICityReadRepository _repo;
         private readonly IQueryTokenizer _tokenizer;
-        public CityReadService(ICityReadRepository repo, IQueryTokenizer tokenizer)
-        { _repo = repo; _tokenizer = tokenizer; }
+        private readonly IHttpClientFactory _httpClientFactory;
+        private readonly ILogger<CityReadService> _logger;
+
+        private static readonly SemaphoreSlim NominatimLock = new(1, 1);
+        private static DateTime _nextNominatimAllowedUtc = DateTime.UtcNow;
+        public CityReadService(ICityReadRepository repo, IQueryTokenizer tokenizer, IHttpClientFactory httpClientFactory, ILogger<CityReadService> logger)
+        { _repo = repo; _tokenizer = tokenizer; _httpClientFactory = httpClientFactory; _logger = logger; }
 
         public async Task<IReadOnlyList<GeoCandidateDTO>> SearchAsync(string query, int limit, CancellationToken ct)
         {
@@ -50,6 +59,95 @@ namespace NewsApplication.Service.Implementations
             if (best is null) return null;
             return bestDistance <= maxDistanceKm ? best : null;
         }
+
+        public async Task<string?> EnsureLocalNameAsync(GeoCandidateDTO city, CancellationToken ct)
+        {
+            if (!string.IsNullOrWhiteSpace(city.LocalName)) return city.LocalName;
+            if (city.Lat is null || city.Lng is null) return null;
+            if (!Guid.TryParse(city.Id, out var cityId)) return null;
+
+            var persisted = await _repo.GetByIdAsync(cityId, ct);
+            if (!string.IsNullOrWhiteSpace(persisted?.LocalName))
+            {
+                return persisted!.LocalName;
+            }
+
+            var localName = await FetchLocalNameAsync(city.Lat.Value, city.Lng.Value, ct);
+            if (string.IsNullOrWhiteSpace(localName)) return null;
+            localName = localName.Trim();
+
+            try
+            {
+                return await _repo.SetLocalNameAsync(cityId, localName!, ct);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex, "Failed to persist LocalName for City {CityId}", cityId);
+                return localName;
+            }
+        }
+
+        private async Task<string?> FetchLocalNameAsync(double lat, double lng, CancellationToken ct)
+        {
+            await NominatimLock.WaitAsync(ct);
+            try
+            {
+                var wait = _nextNominatimAllowedUtc - DateTime.UtcNow;
+                if (wait > TimeSpan.Zero)
+                {
+                    await Task.Delay(wait, ct);
+                }
+                _nextNominatimAllowedUtc = DateTime.UtcNow.AddSeconds(1);
+            }
+            finally
+            {
+                NominatimLock.Release();
+            }
+
+            var client = _httpClientFactory.CreateClient("nominatim");
+            var url =
+                $"reverse?format=jsonv2&lat={lat.ToString(CultureInfo.InvariantCulture)}&lon={lng.ToString(CultureInfo.InvariantCulture)}&zoom=10&addressdetails=1&namedetails=1";
+            using var resp = await client.GetAsync(url, ct);
+
+            if (!resp.IsSuccessStatusCode)
+            {
+                _logger.LogWarning("Nominatim returned {StatusCode} for {Lat},{Lng}", resp.StatusCode, lat, lng);
+                return null;
+            }
+
+            await using var stream = await resp.Content.ReadAsStreamAsync(ct);
+            using var doc = await JsonDocument.ParseAsync(stream, cancellationToken: ct);
+
+            string? val = null;
+            var root = doc.RootElement;
+            val ??= TryGetString(root, "localname");
+            val ??= TryGetString(root, "name");
+
+            if (root.TryGetProperty("namedetails", out var details) && details.ValueKind == JsonValueKind.Object)
+            {
+                val ??= TryGetString(details, "name");
+                if (val is null)
+                {
+                    foreach (var prop in details.EnumerateObject())
+                    {
+                        if (prop.Value.ValueKind == JsonValueKind.String)
+                        {
+                            val = prop.Value.GetString();
+                            if (!string.IsNullOrWhiteSpace(val)) break;
+                        }
+                    }
+                }
+            }
+
+            val ??= TryGetString(root, "display_name")?.Split(',').FirstOrDefault();
+
+            return string.IsNullOrWhiteSpace(val) ? null : val.Trim();
+        }
+
+        private static string? TryGetString(JsonElement element, string name)
+            => element.TryGetProperty(name, out var prop) && prop.ValueKind == JsonValueKind.String
+                ? prop.GetString()
+                : null;
 
         private static double HaversineKm(double lat1, double lng1, double lat2, double lng2)
         {

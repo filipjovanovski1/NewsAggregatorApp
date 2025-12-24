@@ -20,7 +20,7 @@ namespace NewsApplication.Repository.Db.Implementations
         WITH q(term) AS (VALUES (lower(unaccent(@token))))
         SELECT c.""Id"", c.""Name"", c.""CountryName"", c.""CountryIso2"",
                co.""Iso3"" AS ""CountryIso3"", 
-               c.""Latitude"", c.""Longitude"",
+               c.""Latitude"", c.""Longitude"", c.""LocalName"",
                similarity(lower(unaccent(c.""Name"")), q.term) AS score
         FROM ""Cities"" c
         JOIN ""Countries"" co ON co.""Iso2"" = c.""CountryIso2""   -- ← join to get Iso3
@@ -65,7 +65,8 @@ namespace NewsApplication.Repository.Db.Implementations
                     c.CountryIso2,
                     Iso3 = c.Country != null ? c.Country.Iso3 : null,
                     c.Latitude,
-                    c.Longitude
+                    c.Longitude,
+                    c.LocalName
                 })
                 .FirstOrDefaultAsync(ct);
 
@@ -80,6 +81,7 @@ namespace NewsApplication.Repository.Db.Implementations
                 CountryIso3 = dto.Iso3?.ToUpperInvariant(),
                 Lat = dto.Latitude,
                 Lng = dto.Longitude,
+                LocalName = dto.LocalName,
                 Score = 1.0
             };
         }
@@ -103,7 +105,8 @@ namespace NewsApplication.Repository.Db.Implementations
                     c.CountryIso2,
                     Iso3 = c.Country != null ? c.Country.Iso3 : null,
                     c.Latitude,
-                    c.Longitude
+                    c.Longitude,
+                    c.LocalName
                 })
                 .Take(take)
                 .ToListAsync(ct);
@@ -118,9 +121,29 @@ namespace NewsApplication.Repository.Db.Implementations
                     CountryIso3 = r.Iso3?.ToUpperInvariant(),
                     Lat = r.Latitude,
                     Lng = r.Longitude,
+                    LocalName = r.LocalName,
                     Score = 1.0
                 })
                 .ToList();
         }
+        public async Task<string?> SetLocalNameAsync(Guid cityId, string localName, CancellationToken ct)
+        {
+            await using var db = await _factory.CreateDbContextAsync(ct);
+
+            var city = await db.Cities
+                .FirstOrDefaultAsync(c => c.Id == cityId, ct);
+
+            if (city is null) return null;
+            if (!string.IsNullOrWhiteSpace(city.LocalName)) return city.LocalName;
+
+            var trimmed = localName?.Trim();
+            if (string.IsNullOrWhiteSpace(trimmed)) return city.LocalName;
+
+            city.LocalName = trimmed;
+            await db.SaveChangesAsync(ct);
+            return city.LocalName;
+        }
+
+       
     }
 }

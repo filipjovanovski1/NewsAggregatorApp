@@ -66,7 +66,11 @@ builder.Services.AddHttpClient<INewsdataClient, NewsdataClient>((sp, http) =>
     var opt = sp.GetRequiredService<Microsoft.Extensions.Options.IOptions<NewsdataOptions>>().Value;
     http.BaseAddress = new Uri(opt.BaseUrl); // full endpoint
 });
-
+builder.Services.AddHttpClient("nominatim", http =>
+{
+    http.BaseAddress = new Uri("https://nominatim.openstreetmap.org/");
+    http.DefaultRequestHeaders.UserAgent.ParseAdd("NewsAggregatorApp/1.0 (+https://newsaggregatorapp.local/contact)");
+});
 builder.Services.AddScoped<IArticleIngestionService, ArticleIngestionService>();
 
 builder.Services.AddControllers(); 

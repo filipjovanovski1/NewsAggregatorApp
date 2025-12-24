@@ -15,5 +15,6 @@ namespace NewsApplication.Domain.DTOs.ImportedCSVs
 
         public long? Population { get; set; }
 
+
     }
 }
