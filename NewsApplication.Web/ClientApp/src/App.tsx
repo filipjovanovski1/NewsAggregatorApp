@@ -1,4 +1,4 @@
-﻿import { useCallback, useEffect, useState} from 'react';
+﻿import { useCallback, useEffect, useRef, useState } from 'react';
 import SearchBar, { type GeoPickContext } from './components/SearchBar';
 import GlobeView from './components/GlobeView';
 import ArticleOverlay from './components/ArticleOverlay';
@@ -45,9 +45,10 @@ const isFiniteNumber = (value: number | null | undefined): value is number =>
 
 type FocusHint = { lat: number; lng: number };
 type ResolveOverrides = Partial<Pick<ResolveScopeResponse, 'countryIso2' | 'countryIso3' | 'focusLat' | 'focusLng'>>;
+
 export default function App() {
     const [scopeKey, setScopeKey] = useState<string | null>(null);
-    const [label, setLabel] = useState<string>('');   // shown in SearchBar + overlay title
+    const [label, setLabel] = useState<string>('');
     const [page, setPage] = useState(1);
 
     const [items, setItems] = useState<ArticleDto[]>([]);
@@ -59,6 +60,9 @@ export default function App() {
     const [highlightIso2, setHighlightIso2] = useState<string | null>(null);
     const [cityMarker, setCityMarker] = useState<{ lat: number; lng: number } | null>(null);
     const [cityMarkers, setCityMarkers] = useState<Array<{ lat: number; lng: number }>>([]);
+
+    // NEW: Ref to trigger SearchBar reset when globe is clicked
+    const searchBarResetTrigger = useRef(0);
 
 
     // Load current UI page (6 items)
@@ -74,7 +78,7 @@ export default function App() {
     }, []);
 
     const applyResolved = useCallback(
-        async (res: ResolveScopeResponse, initialPage = 1, options?: { focusHint?: FocusHint | null; overrides?: ResolveOverrides }) => {
+        async (res: ResolveScopeResponse, initialPage = 1, options?: { focusHint?: FocusHint | null; overrides?: ResolveOverrides; fromGlobeClick?: boolean }) => {
             const effective: ResolveScopeResponse = {
                 ...res,
                 ...(options?.overrides ?? {})
@@ -83,6 +87,11 @@ export default function App() {
             setScopeKey(effective.scopeKey);
             setLabel(effective.label);
             setHighlightIso2(effective.countryIso2 ?? null);
+
+            // NEW: Increment trigger when this came from a globe click
+            if (options?.fromGlobeClick) {
+                searchBarResetTrigger.current += 1;
+            }
 
             const hint = options?.focusHint ?? null;
             const lat = effective.focusLat ?? hint?.lat ?? null;
@@ -105,7 +114,6 @@ export default function App() {
         [load]
     );
 
-    // Keep one provider page ahead warm (background)
     useEffect(() => {
         if (scopeKey && nextProviderPage != null) {
             prewarm(scopeKey, nextProviderPage).catch(() => { });
@@ -113,7 +121,7 @@ export default function App() {
     }, [scopeKey, nextProviderPage]);
 
     const resolveAndLoad = useCallback(
-        async (body: Parameters<typeof resolveScope>[0], options?: { focusHint?: FocusHint | null; overrides?: ResolveOverrides }) => {
+        async (body: Parameters<typeof resolveScope>[0], options?: { focusHint?: FocusHint | null; overrides?: ResolveOverrides; fromGlobeClick?: boolean }) => {
             const res = await resolveScope(body);
             const overrides: ResolveOverrides = { ...(options?.overrides ?? {}) };
 
@@ -125,26 +133,26 @@ export default function App() {
                 overrides.countryIso2 = overrides.countryIso2 ?? body.city.countryIso2?.toUpperCase();
             }
 
-            await applyResolved(res, 1, { focusHint: options?.focusHint ?? null, overrides });
+            await applyResolved(res, 1, {
+                focusHint: options?.focusHint ?? null,
+                overrides,
+                fromGlobeClick: options?.fromGlobeClick
+            });
         },
         [applyResolved]
     );
 
-    // SearchBar submit → real search (unambiguous or composite keyword-only)
-        async function onSearch(q: string, opts?: { countryIso2?: string }) {
+    async function onSearch(q: string, opts?: { countryIso2?: string }) {
         const trimmed = q.trim();
         if (!trimmed) return;
 
         try {
-            // Clear any map-only ambiguity state (multi pins) before doing a real search
-            setCityMarkers([]);          // <-- new: remove batch markers from CityInCountry preview
-            // (No need to clear highlightIso2/cityMarker here; resolveAndLoad will set them.)
-
+            setCityMarkers([]);
             const body: Parameters<typeof resolveScope>[0] =
-                              opts?.countryIso2
-                                    ? { q: trimmed, country: { iso2: opts.countryIso2.toUpperCase() } }
-                                : { q: trimmed };
-                        await resolveAndLoad(body);
+                opts?.countryIso2
+                    ? { q: trimmed, country: { iso2: opts.countryIso2.toUpperCase() } }
+                    : { q: trimmed };
+            await resolveAndLoad(body);
         } catch (err) {
             console.error(err);
         }
@@ -162,26 +170,23 @@ export default function App() {
         setFocus(model.focus ? { lat: model.focus.lat, lng: model.focus.lng, altitude: 2.0 } : null);
     }
 
-
     function onClearGeo() {
-        // Composite → we do NOT show geo, so clear any previous outline/pins
         setHighlightIso2(null);
         setCityMarker(null);
         setCityMarkers([]);
         setFocus(null);
     }
 
-    // Globe clicks
+    // Globe clicks - mark as from globe
     async function onPick(lat: number, lng: number) {
         try {
             const res = await reverseScope({ lat, lng });
-            await applyResolved(res, 1);
+            await applyResolved(res, 1, { fromGlobeClick: true });
         } catch (err) {
             console.error(err);
         }
     }
 
-    // Country polygon click (now passes iso2 + iso3)
     async function onPickCountry(iso2: string, iso3: string | null, name: string | null, lat: number, lng: number) {
         const focusHint = Number.isFinite(lat) && Number.isFinite(lng) ? { lat, lng } : null;
         try {
@@ -192,7 +197,8 @@ export default function App() {
                     overrides: {
                         countryIso2: iso2?.toUpperCase(),
                         countryIso3: iso3?.toUpperCase()
-                    }
+                    },
+                    fromGlobeClick: true
                 }
             );
         } catch (err) {
@@ -214,14 +220,12 @@ export default function App() {
             const rawQueryText = keywordTail || fullText || undefined;
             const queryText = sanitizeCityKeywords(rawQueryText, candidate);
 
-            // Build the city request with keywords if present
             const cityRequest = {
                 city: {
                     id: candidate.id,
                     name: candidate.name,
                     countryIso2: iso2 || candidate.countryIso2 || ''
                 },
-                // Add keywords to the request if they exist
                 ...(queryText ? { q: queryText } : {})
             };
 
@@ -253,14 +257,12 @@ export default function App() {
             const fullText = context?.fullText?.trim();
             const queryText = keywordTail || fullText || undefined;
 
-            // Build the country request with keywords if present
             const countryRequest = {
                 country: {
                     iso2,
                     iso3: iso3 ?? undefined,
                     name: candidate.name ?? iso2
                 },
-                // Add keywords to the request if they exist
                 ...(queryText ? { q: queryText } : {})
             };
 
@@ -277,7 +279,7 @@ export default function App() {
         },
         [resolveAndLoad]
     );
-   
+
     const previewCitySelection = useCallback(
         (candidate: PreviewGeoCandidate) => {
             const iso2 = candidate.countryIso2?.toUpperCase() ?? null;
@@ -320,13 +322,14 @@ export default function App() {
                 <SearchBar
                     inline
                     value={label}
+                    resetTrigger={searchBarResetTrigger.current}
                     onSearch={onSearch}
                     onPickCity={handleCommitCity}
                     onPickCountry={handleCommitCountry}
                     onPreviewCity={previewCitySelection}
                     onPreviewCountry={previewCountrySelection}
-                    onAmbiguous={onAmbiguous}   // show geo for ambiguous
-                    onClearGeo={onClearGeo}     // clear geo for composite
+                    onAmbiguous={onAmbiguous}
+                    onClearGeo={onClearGeo}
                 />
             </div>
 
@@ -338,7 +341,7 @@ export default function App() {
                         focus={focus}
                         highlightIso2={highlightIso2}
                         cityMarker={cityMarker}
-                        cityMarkers={cityMarkers} 
+                        cityMarkers={cityMarkers}
                     />
                 </div>
             </div>
@@ -361,7 +364,6 @@ export default function App() {
                         setCanPrev(false);
                         setCanNext(false);
                         setNextProviderPage(null);
-                    
                     }}
                 />
             )}

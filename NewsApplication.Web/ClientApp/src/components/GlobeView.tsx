@@ -47,7 +47,6 @@ interface Props {
     cityMarker?: { lat: number; lng: number } | null;
     /** Array of city markers (takes precedence over cityMarker when provided). */
     cityMarkers?: { lat: number; lng: number }[] | null;
-
 }
 
 export default function GlobeView({
@@ -113,7 +112,7 @@ export default function GlobeView({
             cancelled = true;
         };
     }, []);
-   
+
     // Uppercase string value of a property, tolerant of unknowns
     function upOf(props: Record<string, unknown>, key: string): string {
         const v = props[key];
@@ -170,7 +169,6 @@ export default function GlobeView({
         return iso;
     }, []);
 
-
     const getIso3 = useCallback((props: Record<string, unknown> | undefined): string | null => {
         if (!props) return null;
 
@@ -184,8 +182,9 @@ export default function GlobeView({
         return a3 || null;
     }, []);
 
-
-    // Filter features by ISO-2 (for the green outline)
+    // IMPORTANT: polyData only contains the highlighted country's features.
+    // This means onPolygonClick ONLY fires when clicking the highlighted country.
+    // Clicking anywhere else (including other countries) triggers onGlobeClick → onPick → reverse lookup
     useEffect(() => {
         const isoWanted = highlightIso2?.toUpperCase();
         if (!isoWanted || !allFeatures || allFeatures.length === 0) {
@@ -213,7 +212,6 @@ export default function GlobeView({
             setPoints([]);
         }
     }, [cityMarkers, cityMarker]);
-
 
     // Limit zoom / damping
     useEffect(() => {
@@ -271,14 +269,26 @@ export default function GlobeView({
 
     return (
         <div ref={wrapRef} className="globe-wrap">
+            {/* 
+                CLICK BEHAVIOR:
+                
+                1. Clicking the HIGHLIGHTED POLYGON (green outline):
+                   → onPolygonClick fires → calls onPickCountry
+                   
+                2. Clicking ANYWHERE ELSE (ocean, other countries):
+                   → onGlobeClick fires → calls onPick → reverse lookup
+                   
+                The highlighted country does NOT constrain other clicks.
+            */}
             <Globe
                 ref={globeRef as unknown as React.MutableRefObject<GlobeApi>}
                 width={size.w}
                 height={size.h}
-                /* Single-click anywhere → reverse lookup (keeps city picks working) */
+                // Clicking anywhere NOT on the highlighted polygon → reverse lookup
                 onGlobeClick={({ lat, lng }: { lat: number; lng: number }) => onPick(lat, lng)}
-                /* Clicking a filled country polygon → send ISO-2; fall back to centroid */
+                // Clicking the HIGHLIGHTED polygon → search for that country
                 onPolygonClick={(poly: Feature, _evt: unknown, extra?: { lat: number; lng: number }) => {
+                    // Extract country info from the CLICKED polygon (not from highlightIso2 state)
                     const c = extra && Number.isFinite(extra.lat) && Number.isFinite(extra.lng)
                         ? { lat: extra.lat, lng: extra.lng }
                         : centroidFromFeature(poly);
@@ -293,10 +303,11 @@ export default function GlobeView({
                         'ADMIN_NAME'
                     ]) || null;
 
-
                     if (iso2 && typeof onPickCountry === 'function') {
+                        // Search for the country that was clicked (from poly.properties)
                         onPickCountry(iso2, iso3, name, c.lat, c.lng);
                     } else {
+                        // Fallback to reverse lookup if no ISO2 found
                         onPick(c.lat, c.lng);
                     }
                 }}
@@ -308,13 +319,13 @@ export default function GlobeView({
                 showAtmosphere
                 atmosphereColor="lightskyblue"
                 atmosphereAltitude={0.25}
-                /* Country outline (stroke only) */
+                // Country outline (stroke only) - ONLY the highlighted country
                 polygonsData={polyData}
                 polygonAltitude={() => 0.01}
                 polygonCapColor={() => 'rgba(0,0,0,0)'}
                 polygonSideColor={() => 'rgba(0,0,0,0)'}
-                polygonStrokeColor={() => '#39FF14'}  /* lime */
-                /* City dot */
+                polygonStrokeColor={() => '#39FF14'}
+                // City dot(s)
                 pointsData={points}
                 pointLat="lat"
                 pointLng="lng"

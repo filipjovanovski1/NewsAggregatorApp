@@ -21,7 +21,8 @@ interface Props {
     onPreviewCountry?: (country: PreviewGeoCandidate, keywords?: string) => void;
     inline?: boolean;
     actionRef?: Ref<HTMLButtonElement>;
-    value?: string; // controlled text from parent (e.g., "Skopje")
+    value?: string;
+    resetTrigger?: number;  // NEW: triggers reset when changed
     onAmbiguous?: (model: {
         outlineIso2?: string | null;
         cities: Array<{ lat: number; lng: number; label?: string }>;
@@ -62,6 +63,7 @@ export default function SearchBar({
     inline = false,
     actionRef,
     value,
+    resetTrigger,
     onClearGeo,
 }: Props) {
     const [q, setQ] = useState(value ?? '');
@@ -91,6 +93,11 @@ export default function SearchBar({
 
     // Replace the entire value sync useEffect with this simpler version:
     const hasInteractedRef = useRef(false);
+
+    // NEW: Reset interaction flag when resetTrigger changes (globe clicks)
+    useEffect(() => {
+        hasInteractedRef.current = false;
+    }, [resetTrigger]);
 
     useEffect(() => {
         if (!hasInteractedRef.current && typeof value === 'string') {
@@ -240,6 +247,7 @@ export default function SearchBar({
             inputRef.current?.focus();
             refocusNoScroll();
             setFocused(true);
+            return;
         }
 
 
