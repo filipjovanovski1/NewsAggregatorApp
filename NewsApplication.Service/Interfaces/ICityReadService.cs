@@ -13,5 +13,7 @@ namespace NewsApplication.Service.Interfaces
         Task<GeoCandidateDTO?> GetByIdAsync(Guid id, CancellationToken ct);
         Task<GeoCandidateDTO?> FindNearestAsync(double lat, double lng, double maxDistanceKm, CancellationToken ct);
         Task<string?> EnsureLocalNameAsync(GeoCandidateDTO city, CancellationToken ct);
+
+        Task<IReadOnlyList<TopCityDTO>> GetTopByPopulationAsync(string countryIso2, int limit, CancellationToken ct);
     }
 }

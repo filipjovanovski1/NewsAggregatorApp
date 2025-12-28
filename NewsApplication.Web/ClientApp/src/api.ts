@@ -102,6 +102,17 @@ export type PreviewResponse = {
     diagnostics?: Record<string, unknown> | null;
 };
 
+export type TopCity = {
+    id: string;
+    name: string;
+    countryName: string;
+    countryIso2: string;
+    countryIso3?: string | null;
+    lat?: number | null;
+    lng?: number | null;
+    population?: number | null;
+};
+
 // ---------- flow header helper ----------
 type SearchBarFlow = { flowId: string; code: string; text?: string; extra?: unknown };
 
@@ -214,6 +225,14 @@ export function prewarm(scopeKey: string, providerPage: number): Promise<Record<
         `/articles/cache/fetch?scopeKey=${encodeURIComponent(scopeKey)}&page=${providerPage}`,
         { method: 'POST' }
     );
+}
+
+export function fetchTopCities(countryIso2: string, limit = 20): Promise<TopCity[]> {
+    const searchParams = new URLSearchParams({
+        countryIso2,
+        limit: String(limit)
+    });
+    return getJSON<TopCity[]>(`/search/cities/top?${searchParams.toString()}`);
 }
 
 // ---------- Mapping helper: SearchItem -> ArticleDto for your UI ----------

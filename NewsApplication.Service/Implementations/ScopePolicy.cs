@@ -85,26 +85,27 @@ namespace NewsApplication.Service.Implementations
          IReadOnlyList<GeoCandidateDTO> countries,
          IReadOnlyList<GeoCandidateDTO> cities)
         {
+            var countryList = countries ?? Array.Empty<GeoCandidateDTO>();
             // No geo at all
-            if ((countries == null || countries.Count == 0) &&
+            if (countryList.Count == 0 &&
                 (cities == null || cities.Count == 0))
                 return ScopeKind.Other;
 
             // Pure country case (0 cities)
             if (cities == null || cities.Count == 0)
             {
-                if (countries?.Count <= 0) return ScopeKind.Other;
+                if (countryList.Count <= 0) return ScopeKind.Other;
 
                 // If we can effectively choose one country → Country; else Composite
-                var chosenIso2 = ChooseCountryIso2(countries, Array.Empty<string>());
+                var chosenIso2 = ChooseCountryIso2(countryList, Array.Empty<string>());
                 if (!string.IsNullOrWhiteSpace(chosenIso2))
                     return ScopeKind.Country;
 
-                return countries!.Count >= 2 ? ScopeKind.Composite : ScopeKind.Country;
+                return countryList.Count >= 2 ? ScopeKind.Composite : ScopeKind.Country;
             }
 
             // There are cities. Prefer deciding relative to a chosen country.
-            var chosen = ChooseCountryIso2(countries ?? Array.Empty<GeoCandidateDTO>(), Array.Empty<string>());
+            var chosen = ChooseCountryIso2(countryList, Array.Empty<string>());
 
             if (!string.IsNullOrWhiteSpace(chosen))
             {
@@ -145,20 +146,22 @@ namespace NewsApplication.Service.Implementations
          IReadOnlyList<GeoCandidateDTO> cities,
          IReadOnlyList<string> nonGeoKeywords)
         {
+            var countryList = countries ?? Array.Empty<GeoCandidateDTO>();
+
             Console.WriteLine($"[ScopePolicy] Start IsAmbiguous. Cities={cities?.Count}, Countries={countries?.Count}");
 
             if (cities == null || cities.Count == 0) return false;
 
             // Detect same-country, multiple-city case early (no chosen country)
-            if (countries.Count == 0 &&
-                cities.GroupBy(c => c.CountryIso2)
+            if (countryList.Count == 0 &&
+               cities.GroupBy(c => c.CountryIso2)
                       .Any(g => g.Count() > 1 && g.Select(x => x.Id).Distinct().Count() > 1))
             {
                 Console.WriteLine("[ScopePolicy] same-country multi-city ambiguity detected (no chosen country)");
                 return true;
             }
 
-            var chosenIso2 = ChooseCountryIso2(countries, nonGeoKeywords,
+            var chosenIso2 = ChooseCountryIso2(countryList, nonGeoKeywords,
                 (k, v) => Console.WriteLine($"[ScopePolicy] {k} {v}"));
 
             Console.WriteLine($"[ScopePolicy] chosenIso2={chosenIso2 ?? "(none)"}");

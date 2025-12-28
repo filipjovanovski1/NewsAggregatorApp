@@ -253,6 +253,7 @@ namespace NewsApplication.Service.Implementations
                         CountryIso3 = dto.CountryIso3,
                         CountryName = dto.CountryName,
                         LocalName = dto.LocalName,
+                        Population = dto.Population,
                         Lat = dto.Lat,
                         Lng = dto.Lng,
                         Score = 1.0
@@ -297,6 +298,7 @@ namespace NewsApplication.Service.Implementations
                               CountryIso3 = dto.CountryIso3,
                               CountryName = dto.CountryName,
                               LocalName = dto.LocalName,
+                              Population = dto.Population,
                               Lat = dto.Lat,
                               Lng = dto.Lng,
                               Score = 1.0
@@ -342,6 +344,7 @@ namespace NewsApplication.Service.Implementations
                             CountryIso3 = dto.CountryIso3,
                             CountryName = dto.CountryName,
                             LocalName = dto.LocalName,
+                            Population = dto.Population,
                             Lat = dto.Lat,
                             Lng = dto.Lng,
                             Score = 1.0
@@ -476,10 +479,19 @@ namespace NewsApplication.Service.Implementations
                 .Where(c => c.Score >= exactFloor && !string.IsNullOrWhiteSpace(c.CountryIso2))
                 .ToList();
 
-            var distinctIsoForExacts = exactExAcross
-                .Select(c => c.CountryIso2!.ToUpperInvariant())
-                .Distinct()
-                .Count();
+            var exactIso2Values = new List<string>();
+            foreach (var candidate in exactExAcross)
+            {
+                var countryIso2 = candidate.CountryIso2;
+                if (string.IsNullOrWhiteSpace(countryIso2))
+                {
+                    continue;
+                }
+
+                exactIso2Values.Add(countryIso2.ToUpperInvariant());
+            }
+
+            var distinctIsoForExacts = exactIso2Values.Distinct().Count();
 
             var hasChosenCountry = !string.IsNullOrWhiteSpace(chosenIso2ForTargets);
 
@@ -506,10 +518,9 @@ namespace NewsApplication.Service.Implementations
 
                     traceLines.Add($"forcedComposite.exactsAcrossCountries={targets.Count}");
                 }
-                else
+                else if (chosenIso2ForTargets is { Length: > 0 } iso)
                 {
                     // User/query/policy pointed to a country → stay in that country
-                    var iso = chosenIso2ForTargets!;
                     var filtered = cityMatches
                         .Where(c => string.Equals(c.CountryIso2, iso, StringComparison.OrdinalIgnoreCase))
                         .ToList();
@@ -552,7 +563,7 @@ namespace NewsApplication.Service.Implementations
             // Build Dictionary<string, List<GeoCandidateDTO>> (not IReadOnly*)
             var citiesByCountry = cityMatches
                 .Where(c => !string.IsNullOrWhiteSpace(c.CountryIso2))
-                .GroupBy(c => c.CountryIso2!, StringComparer.OrdinalIgnoreCase)
+                .GroupBy(c => c.CountryIso2 ?? string.Empty, StringComparer.OrdinalIgnoreCase)
                 .ToDictionary(g => g.Key, g => g.ToList(), StringComparer.OrdinalIgnoreCase);
 
 
@@ -616,6 +627,7 @@ namespace NewsApplication.Service.Implementations
                             CountryIso2 = c.CountryIso2,
                             CountryName = c.CountryName,
                             LocalName = c.LocalName,
+                            Population = c.Population,
                             Lat = c.Lat,
                             Lng = c.Lng,
                             Score = c.Score
@@ -807,6 +819,7 @@ namespace NewsApplication.Service.Implementations
                             CountryIso3 = co.CountryIso3,
                             CountryName = co.CountryName,
                             LocalName = co.LocalName,
+                            Population = co.Population,
                             Lat = co.Lat,
                             Lng = co.Lng,
                             Score = 1.0
@@ -864,6 +877,7 @@ namespace NewsApplication.Service.Implementations
                                 CountryIso3 = city.CountryIso3,
                                 CountryName = city.CountryName,
                                 LocalName = city.LocalName,
+                                Population = city.Population,
                                 Lat = city.Lat,
                                 Lng = city.Lng,
                                 Score = 1.0

@@ -297,6 +297,18 @@ body {
     overflow: visible;
 }
 
+.globe-html-label {
+    padding: 6px 10px;
+    background: transparent;
+    color: #fff;
+    border-radius: 12px;
+    cursor: pointer;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    font-weight: 700;
+    text-shadow: 0 1px 4px rgba(0, 0, 0, 0.45);
+}
 /* ================================= */
 /* ===========================
    LOADER / TOAST

@@ -23,7 +23,7 @@ namespace NewsApplication.Domain.DTOs.Mappings
                 var s = row.Row.GetField("Population")?.Trim();
                 if (long.TryParse(s, NumberStyles.Integer, CultureInfo.InvariantCulture, out var v))
                     return v;
-                return null; // junk like "Europe/Moscow" becomes null
+                return 0L; // junk like "Europe/Moscow" becomes 0
             });
         }
     }

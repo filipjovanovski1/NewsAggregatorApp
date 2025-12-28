@@ -35,4 +35,16 @@ public sealed class SearchController : ControllerBase
         var result = await svc.PreviewAsync(q, ct);
         return Ok(result);
     }
+    [HttpGet("cities/top")]
+    public async Task<IActionResult> GetTopCities(
+       [FromQuery] string countryIso2,
+       [FromServices] ICityReadService svc,
+       CancellationToken ct,
+       [FromQuery] int limit = 20)
+    {
+        if (string.IsNullOrWhiteSpace(countryIso2)) return BadRequest("countryIso2 is required");
+        var safeLimit = limit <= 0 ? 20 : Math.Min(limit, 100);
+        var data = await svc.GetTopByPopulationAsync(countryIso2, safeLimit, ct);
+        return Ok(data);
+    }
 }

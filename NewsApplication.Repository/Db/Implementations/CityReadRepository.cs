@@ -20,7 +20,7 @@ namespace NewsApplication.Repository.Db.Implementations
         WITH q(term) AS (VALUES (lower(unaccent(@token))))
         SELECT c.""Id"", c.""Name"", c.""CountryName"", c.""CountryIso2"",
                co.""Iso3"" AS ""CountryIso3"", 
-               c.""Latitude"", c.""Longitude"", c.""LocalName"",
+               c.""Latitude"", c.""Longitude"", c.""Population"", c.""LocalName"",
                similarity(lower(unaccent(c.""Name"")), q.term) AS score
         FROM ""Cities"" c
         JOIN ""Countries"" co ON co.""Iso2"" = c.""CountryIso2""   -- ← join to get Iso3
@@ -66,6 +66,7 @@ namespace NewsApplication.Repository.Db.Implementations
                     Iso3 = c.Country != null ? c.Country.Iso3 : null,
                     c.Latitude,
                     c.Longitude,
+                    c.Population,
                     c.LocalName
                 })
                 .FirstOrDefaultAsync(ct);
@@ -81,6 +82,7 @@ namespace NewsApplication.Repository.Db.Implementations
                 CountryIso3 = dto.Iso3?.ToUpperInvariant(),
                 Lat = dto.Latitude,
                 Lng = dto.Longitude,
+                Population = dto.Population,
                 LocalName = dto.LocalName,
                 Score = 1.0
             };
@@ -106,6 +108,7 @@ namespace NewsApplication.Repository.Db.Implementations
                     Iso3 = c.Country != null ? c.Country.Iso3 : null,
                     c.Latitude,
                     c.Longitude,
+                    c.Population,
                     c.LocalName
                 })
                 .Take(take)
@@ -121,11 +124,42 @@ namespace NewsApplication.Repository.Db.Implementations
                     CountryIso3 = r.Iso3?.ToUpperInvariant(),
                     Lat = r.Latitude,
                     Lng = r.Longitude,
+                    Population = r.Population,
                     LocalName = r.LocalName,
                     Score = 1.0
                 })
                 .ToList();
         }
+
+        public async Task<IReadOnlyList<TopCityDTO>> GetTopByPopulationAsync(string countryIso2, int limit, CancellationToken ct)
+        {
+            var take = Math.Clamp(limit, 1, 100);
+            var iso = (countryIso2 ?? string.Empty).Trim().ToUpperInvariant();
+
+            await using var db = await _factory.CreateDbContextAsync(ct);
+
+            var rows = await db.Cities
+                .AsNoTracking()
+                .Where(c => c.CountryIso2 == iso)
+                .OrderByDescending(c => c.Population)
+                .ThenBy(c => c.Id)
+                .Select(c => new TopCityDTO
+                {
+                    Id = c.Id.ToString(),
+                    Name = c.Name,
+                    CountryName = c.CountryName,
+                    CountryIso2 = c.CountryIso2,
+                    CountryIso3 = c.Country != null ? c.Country.Iso3 : null,
+                    Lat = c.Latitude,
+                    Lng = c.Longitude,
+                    Population = (long)c.Population
+                })
+                .Take(take)
+                .ToListAsync(ct);
+
+            return rows;
+        }
+
         public async Task<string?> SetLocalNameAsync(Guid cityId, string localName, CancellationToken ct)
         {
             await using var db = await _factory.CreateDbContextAsync(ct);

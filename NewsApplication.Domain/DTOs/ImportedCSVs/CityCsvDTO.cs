@@ -13,7 +13,7 @@ namespace NewsApplication.Domain.DTOs.ImportedCSVs
         public string CountryName { get; set; } = null!;
         public string Coordinates { get; set; } = null!;  // "lat, lon"
 
-        public long? Population { get; set; }
+        public long Population { get; set; }
 
 
     }

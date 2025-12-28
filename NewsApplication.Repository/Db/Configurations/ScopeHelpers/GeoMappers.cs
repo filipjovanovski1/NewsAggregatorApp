@@ -19,6 +19,7 @@ namespace NewsApplication.Repository.Db.Configurations.ScopeHelpers
             LocalName = r.LocalName,
             Lat = r.Latitude,
             Lng = r.Longitude,
+            Population = r.Population,
             Score = r.Score
         };
 

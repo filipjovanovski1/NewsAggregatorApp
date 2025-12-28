@@ -3,12 +3,14 @@ import SearchBar, { type GeoPickContext } from './components/SearchBar';
 import GlobeView from './components/GlobeView';
 import ArticleOverlay from './components/ArticleOverlay';
 import type { ArticleDto } from './types';
+import { loadTopCitiesForHover } from './hoverCities';
 import {
     resolveScope,
     reverseScope,
     searchArticles,
     prewarm,
-    preview,
+    //preview,
+    fetchTopCities,
     toArticleDto,
     type ResolveScopeResponse,
     type PreviewGeoCandidate
@@ -53,6 +55,17 @@ const isFiniteNumber = (value: number | null | undefined): value is number =>
 type FocusHint = { lat: number; lng: number };
 type ResolveOverrides = Partial<Pick<ResolveScopeResponse, 'countryIso2' | 'countryIso3' | 'focusLat' | 'focusLng'>>;
 
+type CityPoint = {
+    lat: number;
+    lng: number;
+    label?: string | null;
+    id?: string | null;
+    countryIso2?: string | null;
+    countryIso3?: string | null;
+    name?: string | null;
+    population?: number | null;
+};
+
 type ScopeSel = {
     scopeKey: string;
     kind: ResolveScopeResponse['kind'];
@@ -81,11 +94,12 @@ export default function App() {
     const [focus, setFocus] = useState<{ lat: number; lng: number; altitude?: number } | null>(null);
     const [highlightIso2, setHighlightIso2] = useState<string | null>(null);
 
-    const [highlightCountryLabel, setHighlightCountryLabel] = useState<string | null>(null);
-    const [cityMarker, setCityMarker] = useState<{ lat: number; lng: number; label?: string | null } | null>(null);
-    const [cityMarkers, setCityMarkers] = useState<Array<{ lat: number; lng: number; label?: string | null }>>([]);
-    const [hoverCities, setHoverCities] = useState<Array<{ lat: number; lng: number; label?: string | null }>>([]);
+    const [cityMarker, setCityMarker] = useState<CityPoint | null>(null);
+    const [cityMarkers, setCityMarkers] = useState<CityPoint[]>([]);
+    const [hoverCities, setHoverCities] = useState<CityPoint[]>([]);
+
     const [hoverIso, setHoverIso] = useState<string | null>(null);
+    const [hoveringHighlight, setHoveringHighlight] = useState(false);
 
     const normalize = useCallback(
         (s: string) => s.trim().toLowerCase().replace(/\s+/g, ' '),
@@ -113,14 +127,21 @@ export default function App() {
         }
 
         setHighlightIso2(sel.countryIso2 ?? null);
-        setHighlightCountryLabel(sel.kind === 'country' ? sel.label : null);
         const lat = sel.focusLat ?? null;
         const lng = sel.focusLng ?? null;
         const markerLabel = sel.displayText ?? sel.label;
 
         if ((sel.kind === 'city' || !!sel.cityId) && lat != null && lng != null) {
             setCityMarkers([]);
-            setCityMarker({ lat, lng, label: markerLabel });
+            setCityMarker({
+                lat,
+                lng,
+                label: markerLabel,
+                id: sel.cityId ?? undefined,
+                countryIso2: sel.countryIso2 ?? undefined,
+                countryIso3: sel.countryIso3 ?? undefined,
+                name: sel.label
+            });
             setFocus({ lat, lng, altitude: 1.6 });
             return;
         }
@@ -242,7 +263,6 @@ export default function App() {
         label?: string;
     }) {
         setHighlightIso2(model.outlineIso2 ?? null);
-        setHighlightCountryLabel(null);
         setCityMarker(null);
         setCityMarkers(model.cities.map(c => ({ lat: c.lat, lng: c.lng, label: c.label })));
         setFocus(model.focus ? { lat: model.focus.lat, lng: model.focus.lng, altitude: 2.0 } : null);
@@ -418,7 +438,6 @@ export default function App() {
         (candidate: PreviewGeoCandidate) => {
             const iso2 = (candidate.countryIso2 ?? candidate.id ?? '').toUpperCase() || null;
             setHighlightIso2(iso2);
-            setHighlightCountryLabel(candidate.name ?? candidate.countryName ?? candidate.countryIso2 ?? null);
             setCityMarker(null);
             setCityMarkers([]);
 
@@ -435,13 +454,41 @@ export default function App() {
 
     const activeSel = activeSource === 'searchbar' ? searchSel : globeSel;
 
-    const handleLabelClick = useCallback(() => {
-        const sel = activeSel;
-        if (sel?.scopeKey) {
-            setOverlayOpen(true);
-            void load(sel.scopeKey, 1);
+    const handleMarkerClick = useCallback((point?: CityPoint | null) => {
+        if (!point) return;
+        const focusLat = isFiniteNumber(point.lat) ? point.lat : undefined;
+        const focusLng = isFiniteNumber(point.lng) ? point.lng : undefined;
+        const focusHint = focusLat != null && focusLng != null ? { lat: focusLat, lng: focusLng } : null;
+        const displayText = point.label ?? point.name ?? '';
+        const countryIso2 = point.countryIso2?.toUpperCase();
+        const countryIso3 = point.countryIso3?.toUpperCase();
+
+        if (point.id && countryIso2) {
+            resolveAndLoad(
+                {
+                    city: {
+                        id: point.id,
+                        name: point.name ?? displayText ?? '',
+                        countryIso2
+                    }
+                },
+                {
+                    focusHint,
+                    overrides: {
+                        countryIso2,
+                        countryIso3
+                    },
+                    displayText: displayText || point.name || '',
+                    source: 'globe'
+                }
+            ).catch(err => console.error(err));
+            return;
         }
-    }, [activeSel, load]);
+
+        if (displayText) {
+            void onSearch(displayText, countryIso2 ? { countryIso2 } : undefined);
+        }
+    }, [onSearch, resolveAndLoad]);
 
     const handleCountryHover = useCallback((iso2: string | null) => {
         const next = iso2 ? iso2.toUpperCase() : null;
@@ -450,23 +497,11 @@ export default function App() {
 
     useEffect(() => {
         let cancelled = false;
-        const loadTopCities = async (iso2: string, nameHint: string | null) => {
+        const isSame = hoverIso && highlightIso2 && hoverIso.toUpperCase() === highlightIso2.toUpperCase();
+        setHoveringHighlight(Boolean(isSame));
+        const loadTopCities = async (iso2: string) => {
             try {
-                const query = nameHint && nameHint.trim().length ? nameHint : iso2;
-                const res = await preview(query);
-                const cities = (res.cityMatches ?? [])
-                    .filter(c => (c.countryIso2 ?? '').toUpperCase() === iso2.toUpperCase())
-                    .filter(c => isFiniteNumber(c.lat) && isFiniteNumber(c.lng));
-                const sorted = [...cities].sort((a, b) => {
-                    const as = typeof a.score === 'number' ? a.score : 0;
-                    const bs = typeof b.score === 'number' ? b.score : 0;
-                    return bs - as;
-                });
-                const top = sorted.slice(0, 20).map(c => ({
-                    lat: Number(c.lat),
-                    lng: Number(c.lng),
-                    label: c.countryName ? `${c.name}, ${c.countryName}` : c.name
-                }));
+                const top = await loadTopCitiesForHover(iso2, fetchTopCities);
                 if (!cancelled) setHoverCities(top);
             } catch (err) {
                 if (!cancelled) setHoverCities([]);
@@ -474,14 +509,14 @@ export default function App() {
             }
         };
 
-        if (hoverIso && highlightIso2 && hoverIso.toUpperCase() === highlightIso2.toUpperCase()) {
-            void loadTopCities(hoverIso, highlightCountryLabel);
+        if (isSame && hoverIso) {
+            void loadTopCities(hoverIso);
         } else {
             setHoverCities([]);
         }
 
         return () => { cancelled = true; };
-    }, [hoverIso, highlightIso2, highlightCountryLabel]);
+    }, [hoverIso, highlightIso2]);
 
     return (
         <div className="app">
@@ -509,8 +544,9 @@ export default function App() {
                         focus={focus}
                         highlightIso2={highlightIso2}
                         cityMarker={cityMarker ?? (activeSel?.kind === 'city' ? cityMarker : null)}
-                        cityMarkers={hoverCities.length ? hoverCities : cityMarkers}
-                        onLabelClick={handleLabelClick}
+                        cityMarkers={hoveringHighlight ? hoverCities : cityMarkers}
+                        hoverCities={hoverCities}
+                        onLabelClick={handleMarkerClick}
                         onCountryHover={handleCountryHover}
                     />
                 </div>

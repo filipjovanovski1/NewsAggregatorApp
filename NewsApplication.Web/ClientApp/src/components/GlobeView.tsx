@@ -20,7 +20,16 @@ interface Feature {
     geometry: Geometry;
 }
 
-type Point = { lat: number; lng: number; label?: string | null };
+type Point = {
+    lat: number;
+    lng: number;
+    label?: string | null;
+    id?: string | null;
+    countryIso2?: string | null;
+    countryIso3?: string | null;
+    name?: string | null;
+    population?: number | null;
+};
 
 type GlobeControls = {
     minDistance: number;
@@ -44,11 +53,13 @@ interface Props {
     /** ISO-2 of country to outline (e.g. "FR"). Pass null/undefined to clear. */
     highlightIso2?: string | null;
     /** City marker coordinates; pass null/undefined to hide. */
-    cityMarker?: { lat: number; lng: number } | null;
+    cityMarker?: Point | null;
     /** Array of city markers (takes precedence over cityMarker when provided). */
-    cityMarkers?: { lat: number; lng: number; label?: string | null }[] | null;
+    cityMarkers?: Point[] | null;
+    /** Hovered city markers for overlays. */
+    hoverCities?: { lat: number; lng: number; label?: string | null }[] | null;
     /** Click handler for labels/markers. */
-    onLabelClick?: (point: { lat: number; lng: number; label?: string | null }) => void;
+    onLabelClick?: (point: Point) => void;
     /** Hover handler for a country polygon (ISO-2) when outline is present. */
     onCountryHover?: (iso2: string | null) => void;
 }
@@ -60,6 +71,7 @@ export default function GlobeView({
     highlightIso2,
     cityMarker,
     cityMarkers,
+    hoverCities,
     onLabelClick,
     onCountryHover,
 
@@ -207,23 +219,35 @@ export default function GlobeView({
 
     // City markers: prefer array; fallback to single marker
     useEffect(() => {
-        const normalize = (m?: { lat: number; lng: number; label?: string | null } | null): Point | null =>
+        const normalize = (m?: Point | null): Point | null =>
             m && Number.isFinite(m.lat) && Number.isFinite(m.lng)
-                ? { lat: Number(m.lat), lng: Number(m.lng), label: m.label ?? null }
+                ? {
+                    lat: Number(m.lat),
+                    lng: Number(m.lng),
+                    label: m.label ?? null,
+                    id: m.id ?? null,
+                    countryIso2: m.countryIso2 ?? null,
+                    countryIso3: m.countryIso3 ?? null,
+                    name: m.name ?? null,
+                    population: m.population ?? null
+                }
                 : null;
         if (Array.isArray(cityMarkers) && cityMarkers.length > 0) {
             const good = cityMarkers.map(normalize).filter(Boolean) as Point[];
             setPoints(good);
+            setHoverLabel(null);
             return;
         }
 
         const single = normalize(cityMarker);
         if (single) {
             setPoints([single]);
+
             setHoverLabel(single);
 
         } else {
             setPoints([]);
+
             setHoverLabel(null);
         }
     }, [cityMarkers, cityMarker]);
@@ -362,23 +386,43 @@ export default function GlobeView({
                     if (wrapRef.current) {
                         wrapRef.current.style.cursor = p ? 'pointer' : '';
                     }
-                    if (p && typeof p === 'object') {
-                        setHoverLabel(p as Point);
-                    } else {
-                        setHoverLabel(null);
-                    }
+                   
                 }}
-                // Labels (only the hovered point)
+                // Labels (only show the hovered point's label to avoid clutter)
                 labelsData={hoverLabel ? [hoverLabel] : []}
                 labelLat="lat"
                 labelLng="lng"
                 labelText="label"
                 labelSize={() => 1.0}
                 labelColor={() => '#FFFFFF'}
-                onLabelClick={() => {
-                    if (onLabelClick && hoverLabel) {
-                        onLabelClick(hoverLabel);
+                labelAltitude={0.03} labelDotRadius={0.2}
+                labelsTransitionDuration={300}
+                onLabelHover={(label?: unknown) => {
+                    if (wrapRef.current) wrapRef.current.style.cursor = label ? 'pointer' : '';
+                    setHoverLabel(label ? (label as Point) : null);
+                }}
+                onLabelClick={(label?: unknown) => {
+                    if (onLabelClick && label && typeof label === 'object') {
+                        onLabelClick(label as Point);
                     }
+                }}
+                htmlElementsData={hoverCities && hoverCities.length ? hoverCities : []}
+                htmlLat="lat"
+                htmlLng="lng"
+                htmlElement={(p: unknown) => {
+                    const point = p as Point;
+                    const el = document.createElement('div');
+                    el.className = 'globe-html-label';
+                    const span = document.createElement('span');
+                    span.textContent = point.label ?? '';
+                    el.appendChild(span);
+                    el.onclick = (evt) => {
+                        evt.stopPropagation();
+                        if (onLabelClick) {
+                            onLabelClick(point);
+                        }
+                    };
+                    return el;
                 }}
             />
         </div>

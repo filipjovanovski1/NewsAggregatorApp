@@ -34,6 +34,7 @@ namespace NewsApplication.Domain.DTOs.Scopes
         public string? LocalName { get; init; }
         public double? Lat { get; init; }
         public double? Lng { get; init; }
+        public long? Population { get; init; }
         public double Score { get; init; }
     }
 }

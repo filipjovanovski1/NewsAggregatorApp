@@ -51,7 +51,7 @@ public sealed class CityImporter
             var name = (dto.Name ?? "").Trim();
             var countryName = (dto.CountryName ?? "").Trim();
             var iso2 = (dto.CountryCode ?? "").Trim().ToUpperInvariant();
-            var pop = dto.Population ?? 0;
+            var pop = dto.Population;
             if (pop < 10_000)
             {
                 // silently skip tiny settlements; or log if you prefer:
@@ -222,7 +222,8 @@ public sealed class CityImporter
                 CountryName = countryName,
                 CountryIso2 = iso2,
                 Latitude = lat,
-                Longitude = lng
+                Longitude = lng,
+                Population = pop
             });
 
             if (batch.Count >= 1000) { inserted += await SaveBatch(batch, errors, row, ct); }

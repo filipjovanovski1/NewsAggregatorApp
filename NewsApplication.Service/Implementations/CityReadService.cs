@@ -163,5 +163,10 @@ namespace NewsApplication.Service.Implementations
             return R * c;
         }
 
+        public Task<IReadOnlyList<TopCityDTO>> GetTopByPopulationAsync(string countryIso2, int limit, CancellationToken ct)
+        {
+            return _repo.GetTopByPopulationAsync(countryIso2, limit, ct);
+        }
+
     }
 }

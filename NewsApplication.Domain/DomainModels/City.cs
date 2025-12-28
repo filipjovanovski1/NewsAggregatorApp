@@ -20,7 +20,8 @@ namespace NewsApplication.Domain.DomainModels
         [ForeignKey(nameof(CountryIso2))] public Country? Country { get; set; }
         public double Latitude { get; set; }
         public double Longitude { get; set; }
-
+        [Required]
+        public long Population { get; set; }
         public string? LocalName { get; set; }
 
     }
