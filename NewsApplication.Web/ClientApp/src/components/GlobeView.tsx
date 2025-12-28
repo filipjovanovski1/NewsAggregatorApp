@@ -20,8 +20,7 @@ interface Feature {
     geometry: Geometry;
 }
 
-type Point = { lat: number; lng: number };
-type LabeledPoint = { lat: number; lng: number; label?: string | null };
+type Point = { lat: number; lng: number; label?: string | null };
 
 type GlobeControls = {
     minDistance: number;
@@ -72,7 +71,7 @@ export default function GlobeView({
     const [allFeatures, setAllFeatures] = useState<Feature[] | null>(null);
     const [polyData, setPolyData] = useState<Feature[]>([]);
     const [points, setPoints] = useState<Point[]>([]);
-    const [labels, setLabels] = useState<LabeledPoint[]>([]);
+    const [hoverLabel, setHoverLabel] = useState<Point | null>(null);
 
     /* Measure searchbar height -> CSS var so stage can be 100vh - searchbar */
     useLayoutEffect(() => {
@@ -208,24 +207,24 @@ export default function GlobeView({
 
     // City markers: prefer array; fallback to single marker
     useEffect(() => {
-        const normalize = (m?: { lat: number; lng: number; label?: string | null } | null): LabeledPoint | null =>
+        const normalize = (m?: { lat: number; lng: number; label?: string | null } | null): Point | null =>
             m && Number.isFinite(m.lat) && Number.isFinite(m.lng)
                 ? { lat: Number(m.lat), lng: Number(m.lng), label: m.label ?? null }
                 : null;
         if (Array.isArray(cityMarkers) && cityMarkers.length > 0) {
-            const good = cityMarkers.map(normalize).filter(Boolean) as LabeledPoint[];
-            setPoints(good.map(p => ({ lat: p.lat, lng: p.lng })));
-            setLabels(good);
+            const good = cityMarkers.map(normalize).filter(Boolean) as Point[];
+            setPoints(good);
             return;
         }
 
         const single = normalize(cityMarker);
         if (single) {
-            setPoints([{ lat: single.lat, lng: single.lng }]);
-            setLabels([single]);
+            setPoints([single]);
+            setHoverLabel(single);
 
         } else {
-            setLabels([]);
+            setPoints([]);
+            setHoverLabel(null);
         }
     }, [cityMarkers, cityMarker]);
 
@@ -356,24 +355,29 @@ export default function GlobeView({
                 pointRadius={0.15}
                 onPointClick={(p: unknown) => {
                     if (onLabelClick) {
-                        onLabelClick(p as LabeledPoint);
+                        onLabelClick(p as Point);
                     }
                 }}
                 onPointHover={(p: unknown) => {
                     if (wrapRef.current) {
                         wrapRef.current.style.cursor = p ? 'pointer' : '';
                     }
+                    if (p && typeof p === 'object') {
+                        setHoverLabel(p as Point);
+                    } else {
+                        setHoverLabel(null);
+                    }
                 }}
-                // Labels (clickable)
-                labelsData={labels}
+                // Labels (only the hovered point)
+                labelsData={hoverLabel ? [hoverLabel] : []}
                 labelLat="lat"
                 labelLng="lng"
                 labelText="label"
                 labelSize={() => 1.0}
                 labelColor={() => '#FFFFFF'}
-                onLabelClick={(l: unknown) => {
-                    if (onLabelClick) {
-                        onLabelClick(l as LabeledPoint);
+                onLabelClick={() => {
+                    if (onLabelClick && hoverLabel) {
+                        onLabelClick(hoverLabel);
                     }
                 }}
             />

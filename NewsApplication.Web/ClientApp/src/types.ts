@@ -4,6 +4,8 @@ export type ArticleDto = {
     id: string;
     title: string;
     url: string;
+    description?: string;
+
     snippet?: string;
     sourceName?: string;
     imageUrl?: string;

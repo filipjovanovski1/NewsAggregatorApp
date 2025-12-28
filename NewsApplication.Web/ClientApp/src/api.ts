@@ -5,6 +5,7 @@ export type ArticleDto = {
     id: string;
     title: string;
     url: string;
+    description?: string;
     snippet?: string;
     sourceName?: string;
     imageUrl?: string;
@@ -221,6 +222,7 @@ export function toArticleDto(x: SearchItem): ArticleDto {
         id: x.articleId,
         title: x.title,
         url: x.url,
+        description: x.description,
         snippet: x.description,
         sourceName: x.publisher ?? x.provider,
         imageUrl: x.imageUrl,

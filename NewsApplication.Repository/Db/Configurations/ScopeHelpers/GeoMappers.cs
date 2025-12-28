@@ -29,8 +29,8 @@ namespace NewsApplication.Repository.Db.Configurations.ScopeHelpers
             CountryName = null,
             CountryIso2 = r.CountryIso2?.ToUpperInvariant(),
             CountryIso3 = r.CountryIso3?.ToUpperInvariant(),   // NEW
-            Lat = null,
-            Lng = null,
+            Lat = r.Latitude,
+            Lng = r.Longitude,
             Score = r.Score
         };
     }
