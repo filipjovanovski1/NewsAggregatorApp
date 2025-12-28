@@ -21,6 +21,7 @@ interface Feature {
 }
 
 type Point = { lat: number; lng: number };
+type LabeledPoint = { lat: number; lng: number; label?: string | null };
 
 type GlobeControls = {
     minDistance: number;
@@ -46,7 +47,11 @@ interface Props {
     /** City marker coordinates; pass null/undefined to hide. */
     cityMarker?: { lat: number; lng: number } | null;
     /** Array of city markers (takes precedence over cityMarker when provided). */
-    cityMarkers?: { lat: number; lng: number }[] | null;
+    cityMarkers?: { lat: number; lng: number; label?: string | null }[] | null;
+    /** Click handler for labels/markers. */
+    onLabelClick?: (point: { lat: number; lng: number; label?: string | null }) => void;
+    /** Hover handler for a country polygon (ISO-2) when outline is present. */
+    onCountryHover?: (iso2: string | null) => void;
 }
 
 export default function GlobeView({
@@ -56,6 +61,9 @@ export default function GlobeView({
     highlightIso2,
     cityMarker,
     cityMarkers,
+    onLabelClick,
+    onCountryHover,
+
 }: Props) {
     const globeRef = useRef<GlobeApi | null>(null);
     const wrapRef = useRef<HTMLDivElement>(null);
@@ -64,6 +72,7 @@ export default function GlobeView({
     const [allFeatures, setAllFeatures] = useState<Feature[] | null>(null);
     const [polyData, setPolyData] = useState<Feature[]>([]);
     const [points, setPoints] = useState<Point[]>([]);
+    const [labels, setLabels] = useState<LabeledPoint[]>([]);
 
     /* Measure searchbar height -> CSS var so stage can be 100vh - searchbar */
     useLayoutEffect(() => {
@@ -137,13 +146,15 @@ export default function GlobeView({
     }
 
     // Return the first non-empty uppercased value among keys
-    function firstUp(props: Record<string, unknown>, keys: string[]): string {
+    const firstUp = useCallback((props: Record<string, unknown>, keys: string[]): string => {
         for (const k of keys) {
             const v = upOf(props, k);
             if (v) return v;
         }
         return '';
-    }
+    }, []);
+
+
 
     // Extract ISO-2 (handles Natural Earth "-99" quirk)
     const getIso = useCallback((props: Record<string, unknown> | undefined): string => {
@@ -167,7 +178,7 @@ export default function GlobeView({
             ]);
         }
         return iso;
-    }, []);
+    }, [firstUp]);
 
     const getIso3 = useCallback((props: Record<string, unknown> | undefined): string | null => {
         if (!props) return null;
@@ -180,7 +191,7 @@ export default function GlobeView({
         ]);
 
         return a3 || null;
-    }, []);
+    }, [firstUp]);
 
     // IMPORTANT: polyData only contains the highlighted country's features.
     // This means onPolygonClick ONLY fires when clicking the highlighted country.
@@ -197,19 +208,24 @@ export default function GlobeView({
 
     // City markers: prefer array; fallback to single marker
     useEffect(() => {
+        const normalize = (m?: { lat: number; lng: number; label?: string | null } | null): LabeledPoint | null =>
+            m && Number.isFinite(m.lat) && Number.isFinite(m.lng)
+                ? { lat: Number(m.lat), lng: Number(m.lng), label: m.label ?? null }
+                : null;
         if (Array.isArray(cityMarkers) && cityMarkers.length > 0) {
-            const good = cityMarkers.filter(
-                (m): m is { lat: number; lng: number } =>
-                    Number.isFinite(m?.lat) && Number.isFinite(m?.lng)
-            );
-            setPoints(good);
+            const good = cityMarkers.map(normalize).filter(Boolean) as LabeledPoint[];
+            setPoints(good.map(p => ({ lat: p.lat, lng: p.lng })));
+            setLabels(good);
             return;
         }
 
-        if (cityMarker && Number.isFinite(cityMarker.lat) && Number.isFinite(cityMarker.lng)) {
-            setPoints([{ lat: cityMarker.lat, lng: cityMarker.lng }]);
+        const single = normalize(cityMarker);
+        if (single) {
+            setPoints([{ lat: single.lat, lng: single.lng }]);
+            setLabels([single]);
+
         } else {
-            setPoints([]);
+            setLabels([]);
         }
     }, [cityMarkers, cityMarker]);
 
@@ -280,8 +296,7 @@ export default function GlobeView({
                    
                 The highlighted country does NOT constrain other clicks.
             */}
-            <Globe
-                ref={globeRef as unknown as React.MutableRefObject<GlobeApi>}
+            <Globe ref={globeRef as unknown as React.RefObject<GlobeApi>}
                 width={size.w}
                 height={size.h}
                 // Clicking anywhere NOT on the highlighted polygon → reverse lookup
@@ -312,6 +327,13 @@ export default function GlobeView({
                     }
                 }}
 
+                onPolygonHover={(poly?: Feature) => {
+                    if (onCountryHover) {
+                        const iso2 = poly ? getIso(poly?.properties) : null;
+                        onCountryHover(iso2 || null);
+                    }
+                }}
+
                 rendererConfig={{ alpha: true, antialias: true }}
                 backgroundColor="rgba(0,0,0,0)"
                 globeImageUrl="//unpkg.com/three-globe/example/img/earth-blue-marble.jpg"
@@ -332,6 +354,28 @@ export default function GlobeView({
                 pointAltitude={() => 0.02}
                 pointColor={() => '#FF3B30'}
                 pointRadius={0.15}
+                onPointClick={(p: unknown) => {
+                    if (onLabelClick) {
+                        onLabelClick(p as LabeledPoint);
+                    }
+                }}
+                onPointHover={(p: unknown) => {
+                    if (wrapRef.current) {
+                        wrapRef.current.style.cursor = p ? 'pointer' : '';
+                    }
+                }}
+                // Labels (clickable)
+                labelsData={labels}
+                labelLat="lat"
+                labelLng="lng"
+                labelText="label"
+                labelSize={() => 1.0}
+                labelColor={() => '#FFFFFF'}
+                onLabelClick={(l: unknown) => {
+                    if (onLabelClick) {
+                        onLabelClick(l as LabeledPoint);
+                    }
+                }}
             />
         </div>
     );

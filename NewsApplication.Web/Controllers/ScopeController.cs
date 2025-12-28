@@ -350,6 +350,12 @@ public sealed class ScopeController : ControllerBase
         [FromServices] ICountryReadService countryService,
         CancellationToken ct)
     {
+        //MODIFIED
+        var flow = Request.Headers["X-SearchBar-Flow"].ToString();
+        if (!string.IsNullOrWhiteSpace(flow))   
+            Console.WriteLine($"SB flow (reverse): {flow}");
+        //MODIFIED
+
         if (req.Lat is null || req.Lng is null ||
             double.IsNaN(req.Lat.Value) || double.IsInfinity(req.Lat.Value) ||
             double.IsNaN(req.Lng.Value) || double.IsInfinity(req.Lng.Value))

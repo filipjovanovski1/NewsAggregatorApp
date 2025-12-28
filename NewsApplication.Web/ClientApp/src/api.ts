@@ -2,113 +2,135 @@
 
 // ---------- Shared client-side DTOs you actually render ----------
 export type ArticleDto = {
-  id: string;
-  title: string;
-  url: string;
-  snippet?: string;
-  sourceName?: string;
-  imageUrl?: string;
-  publishedUtc?: string; // ISO string
+    id: string;
+    title: string;
+    url: string;
+    snippet?: string;
+    sourceName?: string;
+    imageUrl?: string;
+    publishedUtc?: string; // ISO string
 };
 
 // Server-side item (what /articles/search returns per item)
 export type SearchItem = {
-  articleId: string;
-  provider: string;
-  title: string;
-  description?: string;
-  imageUrl?: string;
-  publisher?: string;
-  url: string;
-  publishedTime: string;   // ISO string
-  categories?: string[];
+    articleId: string;
+    provider: string;
+    title: string;
+    description?: string;
+    imageUrl?: string;
+    publisher?: string;
+    url: string;
+    publishedTime: string;   // ISO string
+    categories?: string[];
 };
 
 // Entire /articles/search response (server)
 export type SearchResponse = {
-  scopeKey: string;
-  uiPage: number;   // which UI page was requested
-  pageSize: number; // always 6
-  hasNewer: boolean;
-  hasOlder: boolean;
-  totalDistinct: number;
-  nextUiPage: number;
-  prefetch?: { providerPage: number; providerPageSize: number };
-  items: SearchItem[];
+    scopeKey: string;
+    uiPage: number;   // which UI page was requested
+    pageSize: number; // always 6
+    hasNewer: boolean;
+    hasOlder: boolean;
+    totalDistinct: number;
+    nextUiPage: number;
+    prefetch?: { providerPage: number; providerPageSize: number };
+    items: SearchItem[];
 };
 
 // /scope/resolve
 export type ResolveScopeResponse = {
-  scopeKey: string;
-  kind: 'city' | 'country' | 'query';
-  label: string;
-  countryIso2?: string;
-  countryIso3?: string;
-  cityId?: string;
-  focusLat?: number;
-  focusLng?: number;
+    scopeKey: string;
+    kind: 'city' | 'country' | 'query';
+    label: string;
+    countryIso2?: string;
+    countryIso3?: string;
+    cityId?: string;
+    focusLat?: number;
+    focusLng?: number;
 };
 
 // The request body we send to /scope/resolve
 export type ResolveScopeBody =
-  | { q: string }
+    | { q: string }
     | { city: { id: string; name: string; countryIso2: string }; q?: string }
     | { country: { iso2: string; iso3?: string; name?: string }; q?: string };
 
 export type ReverseScopeBody = { lat: number; lng: number };
 
 export const ScopeKind = {
-  None: 0,
-  City: 1,
-  Country: 2,
-  CityInCountry: 3,
-  Other: 4,
-  Composite: 5
+    None: 0,
+    City: 1,
+    Country: 2,
+    CityInCountry: 3,
+    Other: 4,
+    Composite: 5
 } as const;
 
 export type ScopeKind = (typeof ScopeKind)[keyof typeof ScopeKind];
 
 export type PreviewGeoCandidate = {
-  id: string;
-  name: string;
-  countryName?: string | null;
-  countryIso2?: string | null;
-  countryIso3?: string | null;
-  lat?: number | null;
-  lng?: number | null;
-  score: number;
+    id: string;
+    name: string;
+    countryName?: string | null;
+    countryIso2?: string | null;
+    countryIso3?: string | null;
+    lat?: number | null;
+    lng?: number | null;
+    score: number;
 };
 export type PreviewToken = {
-  raw: string;
-  normalized: string;
-  matchedEntityType: string;
-  countries?: PreviewGeoCandidate[];
-  cities?: PreviewGeoCandidate[];
+    raw: string;
+    normalized: string;
+    matchedEntityType: string;
+    countries?: PreviewGeoCandidate[];
+    cities?: PreviewGeoCandidate[];
 };
 
 export type PreviewResponse = {
-  originalQuery: string;
-  kind: ScopeKind;
+    originalQuery: string;
+    kind: ScopeKind;
     isAmbiguous: boolean;
     outlineIso2?: string | null;
-  canSearch: boolean;
-  countryMatches: PreviewGeoCandidate[];
-  cityMatches: PreviewGeoCandidate[];
-  citiesGroupedByCountry: Record<string, PreviewGeoCandidate[]>;
-  nonGeoKeywords: string[];
-  tokens?: PreviewToken[];
-  targets: PreviewGeoCandidate[];
-  diagnostics?: Record<string, unknown> | null;
+    canSearch: boolean;
+    countryMatches: PreviewGeoCandidate[];
+    cityMatches: PreviewGeoCandidate[];
+    citiesGroupedByCountry: Record<string, PreviewGeoCandidate[]>;
+    nonGeoKeywords: string[];
+    tokens?: PreviewToken[];
+    targets: PreviewGeoCandidate[];
+    diagnostics?: Record<string, unknown> | null;
 };
+
+// ---------- flow header helper ----------
+type SearchBarFlow = { flowId: string; code: string; text?: string; extra?: unknown };
+
+declare global {
+    interface Window {
+        __SB_FLOW?: SearchBarFlow;
+    }
+}
+
+function flowHeaders(): Record<string, string> {
+    const flow = typeof window !== 'undefined' ? window.__SB_FLOW : undefined;
+    if (!flow) return {};
+    try {
+        return { 'X-SearchBar-Flow': JSON.stringify(flow) };
+    } catch {
+        return {};
+    }
+}
 
 // ---------- tiny typed fetch helpers ----------
 async function getJSON<T>(input: RequestInfo | URL, init?: RequestInit): Promise<T> {
-  const r = await fetch(input, init);
-  if (!r.ok) {
-    const msg = await r.text().catch(() => String(r.status));
-    throw new Error(`HTTP ${r.status}: ${msg}`);
-  }
-  return (await r.json()) as T;
+    const r = await fetch(input, {
+        ...init,
+        headers: { ...(init?.headers ?? {}), ...flowHeaders() },
+    });
+    if (!r.ok) {
+        const msg = await r.text().catch(() => String(r.status));
+        throw new Error(`HTTP ${r.status}: ${msg}`);
+    }
+    return (await r.json()) as T;
 }
 
 function isAbortError(err: unknown): boolean {
@@ -133,7 +155,11 @@ export function makeAbortableGetJSON<T>() {
         last = ac;
 
         try {
-            const r = await fetch(input, { ...init, signal: ac.signal });
+            const r = await fetch(input, {
+                ...init,
+                signal: ac.signal,
+                headers: { ...(init?.headers ?? {}), ...flowHeaders() },
+            });
             if (!r.ok) {
                 const msg = await r.text().catch(() => String(r.status));
                 throw new Error(`HTTP ${r.status}: ${msg}`);
@@ -156,48 +182,48 @@ const getJSONAbortable = makeAbortableGetJSON<unknown>() as <T>(i: RequestInfo |
 
 // ---------- API calls ----------
 export function preview(q: string): Promise<PreviewResponse> {
-  // Use abortable fetch for typeahead UX
-  return getJSONAbortable<PreviewResponse>(`/search/preview?q=${encodeURIComponent(q)}`);
+    // Use abortable fetch for typeahead UX
+    return getJSONAbortable<PreviewResponse>(`/search/preview?q=${encodeURIComponent(q)}`);
 }
 
 export function resolveScope(body: ResolveScopeBody): Promise<ResolveScopeResponse> {
-  return getJSON<ResolveScopeResponse>('/scope/resolve', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(body),
-  });
+    return getJSON<ResolveScopeResponse>('/scope/resolve', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+    });
 }
 
 export function reverseScope(body: ReverseScopeBody): Promise<ResolveScopeResponse> {
-  return getJSON<ResolveScopeResponse>('/scope/reverse', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(body),
-  });
+    return getJSON<ResolveScopeResponse>('/scope/reverse', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+    });
 }
 
 export function searchArticles(scopeKey: string, uiPage: number): Promise<SearchResponse> {
-  return getJSON<SearchResponse>(`/articles/search?scopeKey=${encodeURIComponent(scopeKey)}&uiPage=${uiPage}`, {
-    method: 'POST',
-  });
+    return getJSON<SearchResponse>(`/articles/search?scopeKey=${encodeURIComponent(scopeKey)}&uiPage=${uiPage}`, {
+        method: 'POST',
+    });
 }
 
 export function prewarm(scopeKey: string, providerPage: number): Promise<Record<string, unknown>> {
-  return getJSON<Record<string, unknown>>(
-    `/articles/cache/fetch?scopeKey=${encodeURIComponent(scopeKey)}&page=${providerPage}`,
-    { method: 'POST' }
-  );
+    return getJSON<Record<string, unknown>>(
+        `/articles/cache/fetch?scopeKey=${encodeURIComponent(scopeKey)}&page=${providerPage}`,
+        { method: 'POST' }
+    );
 }
 
 // ---------- Mapping helper: SearchItem -> ArticleDto for your UI ----------
 export function toArticleDto(x: SearchItem): ArticleDto {
-  return {
-    id: x.articleId,
-    title: x.title,
-    url: x.url,
-    snippet: x.description,
-    sourceName: x.publisher ?? x.provider,
-    imageUrl: x.imageUrl,
-    publishedUtc: x.publishedTime
-  };
+    return {
+        id: x.articleId,
+        title: x.title,
+        url: x.url,
+        snippet: x.description,
+        sourceName: x.publisher ?? x.provider,
+        imageUrl: x.imageUrl,
+        publishedUtc: x.publishedTime
+    };
 }

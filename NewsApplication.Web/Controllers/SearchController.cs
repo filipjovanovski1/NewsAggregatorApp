@@ -26,5 +26,13 @@ public sealed class SearchController : ControllerBase
         [FromQuery] string q,
         [FromServices] IScopeResolverService svc,
         CancellationToken ct)
-        => Ok(await svc.PreviewAsync(q, ct)); // best-fit with bigrams + ISO promotion + thresholds :contentReference[oaicite:14]{index=14}
+
+    {
+        var flow = Request.Headers["X-SearchBar-Flow"].ToString();
+        if (!string.IsNullOrWhiteSpace(flow))
+            Console.WriteLine($"SB flow (preview): {flow}");
+
+        var result = await svc.PreviewAsync(q, ct);
+        return Ok(result);
+    }
 }

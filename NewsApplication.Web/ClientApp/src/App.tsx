@@ -1,4 +1,4 @@
-﻿import { useCallback, useEffect, useRef, useState } from 'react';
+﻿import { useCallback, useEffect, useState } from 'react';
 import SearchBar, { type GeoPickContext } from './components/SearchBar';
 import GlobeView from './components/GlobeView';
 import ArticleOverlay from './components/ArticleOverlay';
@@ -8,6 +8,7 @@ import {
     reverseScope,
     searchArticles,
     prewarm,
+    preview,
     toArticleDto,
     type ResolveScopeResponse,
     type PreviewGeoCandidate
@@ -17,6 +18,12 @@ const UI_PAGE_SIZE = 6;
 
 const whitespaceSplitter = /\s+/;
 
+const formatLabel = (res: ResolveScopeResponse): string => {
+    if (res.kind === 'city') {
+        return res.countryIso2 ? `${res.label}, ${res.countryIso2}` : res.label;
+    }
+    return res.label;
+};
 function sanitizeCityKeywords(
     query: string | undefined,
     candidate: PreviewGeoCandidate
@@ -46,9 +53,24 @@ const isFiniteNumber = (value: number | null | undefined): value is number =>
 type FocusHint = { lat: number; lng: number };
 type ResolveOverrides = Partial<Pick<ResolveScopeResponse, 'countryIso2' | 'countryIso3' | 'focusLat' | 'focusLng'>>;
 
+type ScopeSel = {
+    scopeKey: string;
+    kind: ResolveScopeResponse['kind'];
+    label: string;
+    displayText?: string;
+    countryIso2?: string;
+    countryIso3?: string;
+    cityId?: string;
+    focusLat?: number;
+    focusLng?: number;
+};
+
 export default function App() {
-    const [scopeKey, setScopeKey] = useState<string | null>(null);
-    const [label, setLabel] = useState<string>('');
+    const [searchSel, setSearchSel] = useState<ScopeSel | null>(null);
+    const [globeSel, setGlobeSel] = useState<ScopeSel | null>(null);
+    const [activeSource, setActiveSource] = useState<'searchbar' | 'globe'>('searchbar');
+    const [overlayOpen, setOverlayOpen] = useState(false);
+    const [currentScopeKey, setCurrentScopeKey] = useState<string | null>(null);
     const [page, setPage] = useState(1);
 
     const [items, setItems] = useState<ArticleDto[]>([]);
@@ -58,17 +80,21 @@ export default function App() {
     const [nextProviderPage, setNextProviderPage] = useState<number | null>(null);
     const [focus, setFocus] = useState<{ lat: number; lng: number; altitude?: number } | null>(null);
     const [highlightIso2, setHighlightIso2] = useState<string | null>(null);
-    const [cityMarker, setCityMarker] = useState<{ lat: number; lng: number } | null>(null);
-    const [cityMarkers, setCityMarkers] = useState<Array<{ lat: number; lng: number }>>([]);
 
-    // NEW: Ref to trigger SearchBar reset when globe is clicked
-    const searchBarResetTrigger = useRef(0);
+    const [highlightCountryLabel, setHighlightCountryLabel] = useState<string | null>(null);
+    const [cityMarker, setCityMarker] = useState<{ lat: number; lng: number; label?: string | null } | null>(null);
+    const [cityMarkers, setCityMarkers] = useState<Array<{ lat: number; lng: number; label?: string | null }>>([]);
+    const [hoverCities, setHoverCities] = useState<Array<{ lat: number; lng: number; label?: string | null }>>([]);
+    const [hoverIso, setHoverIso] = useState<string | null>(null);
 
-
-    // Load current UI page (6 items)
+    const normalize = useCallback(
+        (s: string) => s.trim().toLowerCase().replace(/\s+/g, ' '),
+        []
+    );
 
     const load = useCallback(async (key: string, uiPage: number) => {
         const res = await searchArticles(key, uiPage);
+        setCurrentScopeKey(key);
         setItems(res.items.map(toArticleDto));
         setPage(res.uiPage);
         setCanPrev(res.hasNewer);
@@ -77,51 +103,89 @@ export default function App() {
         setNextProviderPage(res.prefetch?.providerPage ?? null);
     }, []);
 
-    const applyResolved = useCallback(
-        async (res: ResolveScopeResponse, initialPage = 1, options?: { focusHint?: FocusHint | null; overrides?: ResolveOverrides; fromGlobeClick?: boolean }) => {
-            const effective: ResolveScopeResponse = {
-                ...res,
-                ...(options?.overrides ?? {})
-            };
+    const syncVisuals = useCallback((sel: ScopeSel | null) => {
+        if (!sel) {
+            setHighlightIso2(null);
+            setCityMarker(null);
+            setCityMarkers([]);
+            setFocus(null);
+            return;
+        }
 
-            setScopeKey(effective.scopeKey);
-            setLabel(effective.label);
-            setHighlightIso2(effective.countryIso2 ?? null);
+        setHighlightIso2(sel.countryIso2 ?? null);
+        setHighlightCountryLabel(sel.kind === 'country' ? sel.label : null);
+        const lat = sel.focusLat ?? null;
+        const lng = sel.focusLng ?? null;
+        const markerLabel = sel.displayText ?? sel.label;
 
-            // NEW: Increment trigger when this came from a globe click
-            if (options?.fromGlobeClick) {
-                searchBarResetTrigger.current += 1;
-            }
+        if ((sel.kind === 'city' || !!sel.cityId) && lat != null && lng != null) {
+            setCityMarkers([]);
+            setCityMarker({ lat, lng, label: markerLabel });
+            setFocus({ lat, lng, altitude: 1.6 });
+            return;
+        }
 
-            const hint = options?.focusHint ?? null;
-            const lat = effective.focusLat ?? hint?.lat ?? null;
-            const lng = effective.focusLng ?? hint?.lng ?? null;
-
-            if (effective.kind === 'city' && lat != null && lng != null) {
-                setCityMarker({ lat, lng });
-                setFocus({ lat, lng, altitude: 1.6 });
-            } else {
-                setCityMarker(null);
-                if (lat != null && lng != null) {
-                    setFocus({ lat, lng, altitude: 2.2 });
-                } else {
-                    setFocus(null);
-                }
-            }
-
-            await load(effective.scopeKey, initialPage);
-        },
-        [load]
-    );
+        setCityMarker(null);
+        if (lat != null && lng != null) {
+            setFocus({ lat, lng, altitude: 2.2 });
+        } else {
+            setFocus(null);
+        }
+    }, []);
 
     useEffect(() => {
-        if (scopeKey && nextProviderPage != null) {
-            prewarm(scopeKey, nextProviderPage).catch(() => { });
+        const activeSel = activeSource === 'searchbar' ? searchSel : globeSel;
+        syncVisuals(activeSel);
+    }, [activeSource, globeSel, searchSel, syncVisuals]);
+
+    useEffect(() => {
+        if (currentScopeKey && nextProviderPage != null) {
+            prewarm(currentScopeKey, nextProviderPage).catch(() => { });
         }
-    }, [scopeKey, nextProviderPage]);
+    }, [currentScopeKey, nextProviderPage]);
+
+    const buildSelection = useCallback(
+        (res: ResolveScopeResponse, options?: { displayText?: string; focusHint?: FocusHint | null; overrides?: ResolveOverrides }): ScopeSel => {
+            const focusLat = res.focusLat ?? options?.focusHint?.lat ?? options?.overrides?.focusLat;
+            const focusLng = res.focusLng ?? options?.focusHint?.lng ?? options?.overrides?.focusLng;
+            const label = formatLabel(res);
+
+            return {
+                scopeKey: res.scopeKey,
+                kind: res.kind,
+                label,
+                displayText: options?.displayText,
+                countryIso2: options?.overrides?.countryIso2 ?? res.countryIso2,
+                countryIso3: options?.overrides?.countryIso3 ?? res.countryIso3,
+                cityId: res.cityId,
+                focusLat: focusLat ?? undefined,
+                focusLng: focusLng ?? undefined
+            };
+        },
+        []
+    );
+
+    const commitSelection = useCallback(
+        async (sel: ScopeSel, source: 'searchbar' | 'globe', initialPage = 1) => {
+            if (source === 'searchbar') {
+                setSearchSel(sel);
+            } else {
+                setGlobeSel(sel);
+            }
+            setActiveSource(source);
+            setOverlayOpen(true);
+            setCityMarkers([]);
+            syncVisuals(sel);
+            await load(sel.scopeKey, initialPage);
+        },
+        [load, syncVisuals]
+    );
 
     const resolveAndLoad = useCallback(
-        async (body: Parameters<typeof resolveScope>[0], options?: { focusHint?: FocusHint | null; overrides?: ResolveOverrides; fromGlobeClick?: boolean }) => {
+        async (
+            body: Parameters<typeof resolveScope>[0],
+            options: { focusHint?: FocusHint | null; overrides?: ResolveOverrides; displayText?: string; source: 'searchbar' | 'globe' }
+        ) => {
             const res = await resolveScope(body);
             const overrides: ResolveOverrides = { ...(options?.overrides ?? {}) };
 
@@ -133,13 +197,15 @@ export default function App() {
                 overrides.countryIso2 = overrides.countryIso2 ?? body.city.countryIso2?.toUpperCase();
             }
 
-            await applyResolved(res, 1, {
+            const sel = buildSelection(res, {
                 focusHint: options?.focusHint ?? null,
                 overrides,
-                fromGlobeClick: options?.fromGlobeClick
+                displayText: options?.displayText
             });
+
+            await commitSelection(sel, options.source, 1);
         },
-        [applyResolved]
+        [buildSelection, commitSelection]
     );
 
     async function onSearch(q: string, opts?: { countryIso2?: string }) {
@@ -147,12 +213,23 @@ export default function App() {
         if (!trimmed) return;
 
         try {
-            setCityMarkers([]);
+            const canReuse =
+                searchSel &&
+                searchSel.displayText &&
+                normalize(searchSel.displayText) === normalize(trimmed);
+
+            if (canReuse) {
+                setActiveSource('searchbar');
+                setOverlayOpen(true);
+                await load(searchSel.scopeKey, 1);
+                return;
+            }
+
             const body: Parameters<typeof resolveScope>[0] =
                 opts?.countryIso2
                     ? { q: trimmed, country: { iso2: opts.countryIso2.toUpperCase() } }
                     : { q: trimmed };
-            await resolveAndLoad(body);
+            await resolveAndLoad(body, { source: 'searchbar', displayText: trimmed });
         } catch (err) {
             console.error(err);
         }
@@ -165,23 +242,54 @@ export default function App() {
         label?: string;
     }) {
         setHighlightIso2(model.outlineIso2 ?? null);
+        setHighlightCountryLabel(null);
         setCityMarker(null);
-        setCityMarkers(model.cities.map(c => ({ lat: c.lat, lng: c.lng })));
+        setCityMarkers(model.cities.map(c => ({ lat: c.lat, lng: c.lng, label: c.label })));
         setFocus(model.focus ? { lat: model.focus.lat, lng: model.focus.lng, altitude: 2.0 } : null);
     }
 
     function onClearGeo() {
+        syncVisuals(null);
+    }
+
+    function onClearSearch() {
+        setSearchSel(null);
+        if (activeSource === 'searchbar') {
+            setOverlayOpen(false);
+            setItems([]);
+            setTotal(undefined);
+            setCanPrev(false);
+            setCanNext(false);
+            setNextProviderPage(null);
+            setCurrentScopeKey(null);
+            setPage(1);
+        } else {
+            syncVisuals(globeSel);
+        }
+    }
+    function onSearchEdit() {
+        setSearchSel(null);
         setHighlightIso2(null);
         setCityMarker(null);
         setCityMarkers([]);
         setFocus(null);
+        if (activeSource === 'searchbar') {
+            setOverlayOpen(false);
+            setItems([]);
+            setTotal(undefined);
+            setCanPrev(false);
+            setCanNext(false);
+            setNextProviderPage(null);
+            setCurrentScopeKey(null);
+            setPage(1);
+        }
     }
 
-    // Globe clicks - mark as from globe
     async function onPick(lat: number, lng: number) {
         try {
             const res = await reverseScope({ lat, lng });
-            await applyResolved(res, 1, { fromGlobeClick: true });
+            const sel = buildSelection(res, { focusHint: { lat, lng } });
+            await commitSelection(sel, 'globe', 1);
         } catch (err) {
             console.error(err);
         }
@@ -190,6 +298,8 @@ export default function App() {
     async function onPickCountry(iso2: string, iso3: string | null, name: string | null, lat: number, lng: number) {
         const focusHint = Number.isFinite(lat) && Number.isFinite(lng) ? { lat, lng } : null;
         try {
+            setCityMarker(null);
+            setCityMarkers([]);
             await resolveAndLoad(
                 { country: { iso2, iso3: iso3 ?? undefined, name: name ?? iso2 } },
                 {
@@ -198,7 +308,7 @@ export default function App() {
                         countryIso2: iso2?.toUpperCase(),
                         countryIso3: iso3?.toUpperCase()
                     },
-                    fromGlobeClick: true
+                    source: 'globe'
                 }
             );
         } catch (err) {
@@ -236,7 +346,9 @@ export default function App() {
                     overrides: {
                         countryIso2: iso2 || undefined,
                         countryIso3: candidate.countryIso3?.toUpperCase()
-                    }
+                    },
+                    displayText: context?.fullText ?? queryText ?? candidate.name ?? '',
+                    source: 'searchbar'
                 }
             ).catch(err => console.error(err));
         },
@@ -273,7 +385,9 @@ export default function App() {
                     overrides: {
                         countryIso2: iso2,
                         countryIso3: iso3 ?? undefined
-                    }
+                    },
+                    displayText: context?.fullText ?? queryText ?? candidate.name ?? '',
+                    source: 'searchbar'
                 }
             ).catch(err => console.error(err));
         },
@@ -289,7 +403,9 @@ export default function App() {
             const lat = candidate.lat;
             const lng = candidate.lng;
             if (isFiniteNumber(lat) && isFiniteNumber(lng)) {
-                setCityMarker({ lat, lng });
+               const countryLabel = candidate.countryName ?? candidate.countryIso2 ?? undefined;
+                const label = countryLabel ? `${candidate.name ?? ''}, ${countryLabel}`.trim().replace(/^,\s*/, '') : candidate.name ?? undefined;
+                setCityMarker({ lat, lng, label });
                 setFocus({ lat, lng, altitude: 1.6 });
             } else {
                 setCityMarker(null);
@@ -302,6 +418,7 @@ export default function App() {
         (candidate: PreviewGeoCandidate) => {
             const iso2 = (candidate.countryIso2 ?? candidate.id ?? '').toUpperCase() || null;
             setHighlightIso2(iso2);
+            setHighlightCountryLabel(candidate.name ?? candidate.countryName ?? candidate.countryIso2 ?? null);
             setCityMarker(null);
             setCityMarkers([]);
 
@@ -316,13 +433,62 @@ export default function App() {
         []
     );
 
+    const activeSel = activeSource === 'searchbar' ? searchSel : globeSel;
+
+    const handleLabelClick = useCallback(() => {
+        const sel = activeSel;
+        if (sel?.scopeKey) {
+            setOverlayOpen(true);
+            void load(sel.scopeKey, 1);
+        }
+    }, [activeSel, load]);
+
+    const handleCountryHover = useCallback((iso2: string | null) => {
+        const next = iso2 ? iso2.toUpperCase() : null;
+        setHoverIso(next);
+    }, []);
+
+    useEffect(() => {
+        let cancelled = false;
+        const loadTopCities = async (iso2: string, nameHint: string | null) => {
+            try {
+                const query = nameHint && nameHint.trim().length ? nameHint : iso2;
+                const res = await preview(query);
+                const cities = (res.cityMatches ?? [])
+                    .filter(c => (c.countryIso2 ?? '').toUpperCase() === iso2.toUpperCase())
+                    .filter(c => isFiniteNumber(c.lat) && isFiniteNumber(c.lng));
+                const sorted = [...cities].sort((a, b) => {
+                    const as = typeof a.score === 'number' ? a.score : 0;
+                    const bs = typeof b.score === 'number' ? b.score : 0;
+                    return bs - as;
+                });
+                const top = sorted.slice(0, 20).map(c => ({
+                    lat: Number(c.lat),
+                    lng: Number(c.lng),
+                    label: c.countryName ? `${c.name}, ${c.countryName}` : c.name
+                }));
+                if (!cancelled) setHoverCities(top);
+            } catch (err) {
+                if (!cancelled) setHoverCities([]);
+                console.error(err);
+            }
+        };
+
+        if (hoverIso && highlightIso2 && hoverIso.toUpperCase() === highlightIso2.toUpperCase()) {
+            void loadTopCities(hoverIso, highlightCountryLabel);
+        } else {
+            setHoverCities([]);
+        }
+
+        return () => { cancelled = true; };
+    }, [hoverIso, highlightIso2, highlightCountryLabel]);
+
     return (
         <div className="app">
             <div className="topbar">
                 <SearchBar
                     inline
-                    value={label}
-                    resetTrigger={searchBarResetTrigger.current}
+                    value={searchSel?.displayText ?? searchSel?.label ?? ''}
                     onSearch={onSearch}
                     onPickCity={handleCommitCity}
                     onPickCountry={handleCommitCountry}
@@ -330,6 +496,8 @@ export default function App() {
                     onPreviewCountry={previewCountrySelection}
                     onAmbiguous={onAmbiguous}
                     onClearGeo={onClearGeo}
+                    onClearSearch={onClearSearch}
+                    onSearchEdit={onSearchEdit}
                 />
             </div>
 
@@ -340,30 +508,27 @@ export default function App() {
                         onPickCountry={onPickCountry}
                         focus={focus}
                         highlightIso2={highlightIso2}
-                        cityMarker={cityMarker}
-                        cityMarkers={cityMarkers}
+                        cityMarker={cityMarker ?? (activeSel?.kind === 'city' ? cityMarker : null)}
+                        cityMarkers={hoverCities.length ? hoverCities : cityMarkers}
+                        onLabelClick={handleLabelClick}
+                        onCountryHover={handleCountryHover}
                     />
                 </div>
             </div>
 
-            {scopeKey && (
+            {overlayOpen && activeSel && (
                 <ArticleOverlay
-                    title={label || 'Articles'}
+                    title={activeSel.label || 'Articles'}
                     items={items}
                     total={total}
                     page={page}
                     pageSize={UI_PAGE_SIZE}
                     canPrev={canPrev}
                     canNext={canNext}
-                    onPrev={() => { if (scopeKey && page > 1) void load(scopeKey, page - 1); }}
-                    onNext={() => { if (scopeKey) void load(scopeKey, page + 1); }}
+                    onPrev={() => { if (activeSel.scopeKey && page > 1) void load(activeSel.scopeKey, page - 1); }}
+                    onNext={() => { if (activeSel.scopeKey) void load(activeSel.scopeKey, page + 1); }}
                     onClose={() => {
-                        setScopeKey(null);
-                        setItems([]);
-                        setTotal(undefined);
-                        setCanPrev(false);
-                        setCanNext(false);
-                        setNextProviderPage(null);
+                        setOverlayOpen(false);
                     }}
                 />
             )}

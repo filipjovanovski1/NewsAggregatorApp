@@ -25,6 +25,11 @@ public sealed class ArticlesController : ControllerBase
         [FromServices] IArticleIngestionService ingest,
         CancellationToken ct)
     {
+        //MODIFIED
+        var flow = Request.Headers["X-SearchBar-Flow"].ToString();
+        if (!string.IsNullOrWhiteSpace(flow))
+            Console.WriteLine($"SB flow (articles/search): {flow}");
+        //MODIFIED
         if (uiPage < 1) uiPage = 1;
 
         // 0) Detect "brand new scope" → preload provider pages 1 and 2 (each 10 items).

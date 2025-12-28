@@ -21,8 +21,7 @@ interface Props {
     onPreviewCountry?: (country: PreviewGeoCandidate, keywords?: string) => void;
     inline?: boolean;
     actionRef?: Ref<HTMLButtonElement>;
-    value?: string;
-    resetTrigger?: number;  // NEW: triggers reset when changed
+    value?: string; // controlled text from parent (e.g., "Skopje")
     onAmbiguous?: (model: {
         outlineIso2?: string | null;
         cities: Array<{ lat: number; lng: number; label?: string }>;
@@ -30,7 +29,22 @@ interface Props {
         label?: string;
     }) => void;
     onClearGeo?: () => void;
+    onClearSearch?: () => void;
+    onSearchEdit?: () => void;
 }
+
+//THIS SEGMENT IS FOR THE CHECK
+
+type SearchBarFlow = { flowId: string; code: string; text?: string; extra?: unknown };
+
+declare global {
+    interface Window {
+        __SB_FLOW?: SearchBarFlow;
+        __SB_FLOW_ID?: string;
+    }
+}
+
+//THIS SEGMENT IS FOR THE CHECK
 
 const PREVIEW_DEBOUNCE_MS = 220;
 
@@ -63,8 +77,9 @@ export default function SearchBar({
     inline = false,
     actionRef,
     value,
-    resetTrigger,
     onClearGeo,
+    onClearSearch,
+    onSearchEdit,
 }: Props) {
     const [q, setQ] = useState(value ?? '');
     const [dirty, setDirty] = useState(false);
@@ -94,11 +109,6 @@ export default function SearchBar({
     // Replace the entire value sync useEffect with this simpler version:
     const hasInteractedRef = useRef(false);
 
-    // NEW: Reset interaction flag when resetTrigger changes (globe clicks)
-    useEffect(() => {
-        hasInteractedRef.current = false;
-    }, [resetTrigger]);
-
     useEffect(() => {
         if (!hasInteractedRef.current && typeof value === 'string') {
             setQ(value);
@@ -109,7 +119,7 @@ export default function SearchBar({
 
     const handleChange = (e: ChangeEvent<HTMLInputElement>) => {
         hasInteractedRef.current = true;  // ← ADD THIS
-        clearGeo();
+        onSearchEdit?.();
         setPendingPick(null);
         setDirty(true);
         setQ(e.target.value);
@@ -218,15 +228,37 @@ export default function SearchBar({
     };
 
 
+    // In SearchBar.tsx, replace the submit function with this improved version:
+
     const submit = async (e: FormEvent<HTMLFormElement>) => {
         e.preventDefault();
         let text = trimmed;
         hasInteractedRef.current = true;
-        if (!text && !pendingPick) return;
+
+        const flowId = crypto.randomUUID();         //CHECK
+        type FlowExtra = Record<string, unknown> | undefined;
+
+        const flag = (code: string, extra?: FlowExtra) => {           //CHECK
+            const payload = { flowId, code, text, trimmed, extra };     //CHECK
+
+            console.debug("[SearchBar.submit]", payload);       //CHECK
+
+            window.__SB_FLOW = payload;        //CHECK
+            window.__SB_FLOW_ID = flowId;     //CHECK
+
+            return payload;         //CHECK
+        };
+
+        flag("START", { hasPendingPick: !!pendingPick });               //CHECK
+
+        if (!text && !pendingPick) {                
+            flag("EXIT_EMPTY");                     //CHECK
+            return;                                 
+        }
+
 
         // If a pill was staged (via keyboard Enter), commit it before continuing.
         if (pendingPick) {
-            clearGeo();
             const { t, v, k, text: stagedText } = pendingPick;
             const nextQ = stagedText.trim();
             setPendingPick(null);
@@ -239,7 +271,17 @@ export default function SearchBar({
             const context: GeoPickContext = {
                 fullText: nextQ,
                 ...(keywordTail ? { keywordTail } : {}),
-            };  
+            };
+
+            flag("PENDING_PICK_COMMIT", { t, nextQ });          //CHECK
+
+            if (t === "city") {                                                                                             //CHECK
+                flag("CALL_onPickCity", { id: v.id ?? null, name: v.name ?? null, iso2: v.countryIso2 ?? null });           //CHECK
+            } else {                                                                                                        //CHECK
+                flag("CALL_onPickCountry", { id: v.id ?? null, name: v.name ?? null, iso2: v.countryIso2 ?? null });        //CHECK
+            }
+
+
 
             if (t === 'city') onPickCity?.(v, context);
             else onPickCountry?.(v, context);
@@ -250,14 +292,34 @@ export default function SearchBar({
             return;
         }
 
+        // IMPORTANT: Don't clear geo state at the start - let the specific handlers decide
+        // clearGeo(); // <- REMOVE THIS
 
-        // Always work with a *fresh* preview so heuristics are reliable
-        const pr: PreviewResponse | null = previewResult ?? (await preview(text).catch(() => null));
+        //CHECK
+        flag("PREVIEW_BEGIN", { usingCached: !!previewResult });          
+        const pr: PreviewResponse | null =
+            previewResult ?? (await preview(text).catch(() => null));
+
+        flag(
+            "PREVIEW_DONE",
+            pr
+                ? {
+                    kind: pr.kind,
+                    isAmbiguous: pr.isAmbiguous,
+                    outlineIso2: pr.outlineIso2,
+                    cityMatches: pr.cityMatches?.length ?? 0,
+                }
+                : undefined
+        );
+         //CHECK
+
         if (!pr) {
-            // no preview → treat as plain keyword search
-            onClearGeo?.();
+            // no preview → treat as plain keyword search (keep geo state intact)
+            flag("NO_PREVIEW_PLAIN_SEARCH");                    //CHECK
             onSearch(text);
-            inputRef.current?.focus(); refocusNoScroll(); setFocused(true);
+            inputRef.current?.focus();
+            refocusNoScroll();
+            setFocused(true);
             return;
         }
 
@@ -273,29 +335,41 @@ export default function SearchBar({
                 null;
 
             if (chosen) {
-                onClearGeo?.();
-                setDirty(false); setPreviewResult(null);
+                flag("COMPOSITE_AMBIGUOUS_CHOSEN", { chosen });         //CHECK
+
+                // Server chose a country - do the search WITHOUT clearing geo
+                // (Keep the current highlight/marker state)
+                setDirty(false);
+                setPreviewResult(null);
 
                 const base = bestLabelFromPreview(pr) ?? text;
                 const nextDisplay = mergeSuggestion(text, base, capturedKeywords(pr));
                 setQ(nextDisplay);
 
-                const safeQ = sanitizeQueryForApi(nextDisplay, pr);  
+                const safeQ = sanitizeQueryForApi(nextDisplay, pr);
                 const iso2 = (chosen || '').toUpperCase();
+
+                flag("CALL_onSearch", { safeQ, iso2 });         //CHECK
+
                 onSearch(safeQ, iso2 ? { countryIso2: iso2 } : undefined);
-                inputRef.current?.focus(); refocusNoScroll(); setFocused(true);
+                inputRef.current?.focus();
+                refocusNoScroll();
+                setFocused(true);
                 return;
             }
-
-            // True cross-country ambiguity → show pins and stop
-            clearGeo();
             const pts = (pr.cityMatches ?? [])
                 .filter(c => Number.isFinite(Number(c.lat)) && Number.isFinite(Number(c.lng)))
                 .map(c => ({ lat: Number(c.lat), lng: Number(c.lng) }));
 
+            flag("COMPOSITE_AMBIGUOUS_PINS");                       //CHECK
+            // True cross-country ambiguity → show pins and stop
+            clearGeo(); // Only clear when showing ambiguity pins
+            flag("CALL_onAmbiguous", { pts: pts.length });          //CHECK
+           
+
             onAmbiguous?.({
                 outlineIso2: null,
-                cities: pts.map(p => ({ ...p })), // you already map to {lat,lng,label}; keep that if you prefer
+                cities: pts.map(p => ({ ...p })),
                 focus: pts.length
                     ? {
                         lat: pts.reduce((s, p) => s + p.lat, 0) / pts.length,
@@ -305,8 +379,11 @@ export default function SearchBar({
                 label: text,
             });
 
-            setDirty(false); setPreviewResult(null);
-            inputRef.current?.focus(); refocusNoScroll(); setFocused(true);
+            setDirty(false);
+            setPreviewResult(null);
+            inputRef.current?.focus();
+            refocusNoScroll();
+            setFocused(true);
             return;
         }
 
@@ -329,6 +406,10 @@ export default function SearchBar({
                     ...(keywordTail ? { keywordTail } : {}),
                 };
 
+                // ✅ checks go HERE
+                flag("CITYINCOUNTRY_AMBIGUOUS_UNIQUE_CITY", { iso, count: inCountryUnique.length });        //CHECK
+                flag("CALL_onPickCity", { chosenCity: chosenCity.id ?? chosenCity.name ?? null });          //CHECK
+
                 onPickCity?.(chosenCity, context);
                 setQ(resolvedText);
                 setDirty(false);
@@ -339,10 +420,17 @@ export default function SearchBar({
                 return;
             }
 
-            clearGeo();
+            
             const inCountry = iso
                 ? cities.filter(c => (c.countryIso2 ?? '').toUpperCase() === iso.toUpperCase())
                 : cities;
+
+            // ✅ checks go HERE
+            flag("CITYINCOUNTRY_AMBIGUOUS_PINS", { iso, count: inCountry.length });                 //CHECK
+
+            clearGeo(); // Only clear when showing ambiguity pins
+
+            flag("CALL_onAmbiguous", { outlineIso2: iso ?? null, cities: inCountry.length });       //CHECK
 
             onAmbiguous?.({
                 outlineIso2: iso ?? null,
@@ -353,14 +441,16 @@ export default function SearchBar({
                 } : undefined,
                 label: text
             });
-            setDirty(false); setPreviewResult(null);
-            inputRef.current?.focus(); refocusNoScroll(); setFocused(true);
-            return; // ← no onSearch
+            setDirty(false);
+            setPreviewResult(null);
+            inputRef.current?.focus();
+            refocusNoScroll();
+            setFocused(true);
+            return;
         }
 
         // --- B) Client-side ambiguity: multiple exact city hits across countries ---
         const EXACT = 0.999;
-        // group by *name* and check distinct ISO2s among near-1.0 hits
         const exactByName = new Map<string, Array<typeof cities[number]>>();
         for (const c of cities) {
             const sc = typeof c.score === 'number' ? c.score : 0;
@@ -372,6 +462,7 @@ export default function SearchBar({
                 exactByName.set(key, arr);
             }
         }
+
         let compositePins: Array<{ lat: number; lng: number; label?: string }> | null = null;
         for (const [, arr] of exactByName) {
             const isoCount = new Set(arr.map(x => (x.countryIso2 ?? '').toUpperCase()).filter(Boolean)).size;
@@ -381,10 +472,13 @@ export default function SearchBar({
                 break;
             }
         }
+
         if (compositePins && compositePins.length >= 2) {
-            clearGeo();
+            flag("CLIENT_AMBIGUOUS_PINS", { pins: compositePins.length });      //CHECK
+            clearGeo(); // Only clear when showing ambiguity pins
+            flag("CALL_onAmbiguous");                                           //CHECK
             onAmbiguous?.({
-                outlineIso2: null, // cross-country → no outline
+                outlineIso2: null,
                 cities: compositePins,
                 focus: {
                     lat: compositePins.reduce((s, p) => s + p.lat, 0) / compositePins.length,
@@ -392,255 +486,252 @@ export default function SearchBar({
                 },
                 label: text
             });
-            setDirty(false); setPreviewResult(null);
-            inputRef.current?.focus(); refocusNoScroll(); setFocused(true);
-            return; // ← no onSearch
-        }
-
-        // --- C) Composite but not ambiguous → keyword-only search (drop geo) ---
-        if (pr.kind === ScopeKind.Composite && !pr.isAmbiguous) {
-            const tail = capturedKeywords(pr);
-            const base = bestLabelFromPreview(pr) ?? text;
-            const nextDisplay = mergeSuggestion(text, base, tail);
-            setQ(nextDisplay);
-            onClearGeo?.();
-            setDirty(false); setPreviewResult(null);
-            const safeQ = sanitizeQueryForApi(nextDisplay, pr);
-            const iso2 = iso2FromPreview(pr);
-            onSearch(safeQ, iso2 ? { countryIso2: iso2 } : undefined);
-            inputRef.current?.focus(); refocusNoScroll(); setFocused(true);
+            setDirty(false);
+            setPreviewResult(null);
+            inputRef.current?.focus();
+            refocusNoScroll();
+            setFocused(true);
             return;
         }
 
-        // --- D) Otherwise proceed with a real search ---
+        // --- C & D) Otherwise proceed with search (keep geo state) ---
         const tail = capturedKeywords(pr);
         const base = bestLabelFromPreview(pr) ?? text;
         const nextText = mergeSuggestion(text, base, tail);
         setQ(nextText);
 
+        // Don't clear geo - let the search results determine new state
+        setDirty(false);
+        setPreviewResult(null);
 
-        onClearGeo?.();
-        setDirty(false); setPreviewResult(null);
+        flag("NORMAL_SEARCH", { nextText, iso2: iso2FromPreview(pr) });         //CHECK
+
         const qForApi = sanitizeQueryForApi(nextText, pr);
         const iso2 = iso2FromPreview(pr);
+
+
+        flag("CALL_onSearch", { qForApi, iso2 });                               //CHECK
+
         onSearch(qForApi, iso2 ? { countryIso2: iso2 } : undefined);
-        inputRef.current?.focus(); refocusNoScroll(); setFocused(true);
-        return;
+        inputRef.current?.focus();
+        refocusNoScroll();
+        setFocused(true);
     };
 
-    
-        // ----- Build pills (API + synthesized) --------------------------------------
 
-        // From API
-        const apiCountryPills = previewResult?.countryMatches ?? [];
-        const cityPills = previewResult?.cityMatches ?? [];
+    // ----- Build pills (API + synthesized) --------------------------------------
 
-        // Display helpers
-        const countryNameOf = (c: PreviewGeoCandidate) =>
+    // From API
+    const apiCountryPills = previewResult?.countryMatches ?? [];
+    const cityPills = previewResult?.cityMatches ?? [];
+
+    // Display helpers
+    const countryNameOf = (c: PreviewGeoCandidate) =>
         normalizeCountryName(c.countryIso2, c.countryName);
 
-        const countryIsoOf = (c: PreviewGeoCandidate) =>
-            up(c.countryIso2 ?? c.countryIso3);
+    const countryIsoOf = (c: PreviewGeoCandidate) =>
+        up(c.countryIso2 ?? c.countryIso3);
 
-        // Synthesize countries from city matches (for the Countries group)
-        const countriesFromCitiesRaw: PreviewGeoCandidate[] = cityPills
-            .map((c) => {
-                const name = countryNameOf(c);
-                const iso = countryIsoOf(c);
-                if (!name) return null;
-                return {
-                    id: iso || up(name), // stable id (prefer ISO)
-                    name,                 // country display name
-                    countryIso2: iso || undefined,
-                } as PreviewGeoCandidate;
-            })
-            .filter(Boolean) as PreviewGeoCandidate[];
+    // Synthesize countries from city matches (for the Countries group)
+    const countriesFromCitiesRaw: PreviewGeoCandidate[] = cityPills
+        .map((c) => {
+            const name = countryNameOf(c);
+            const iso = countryIsoOf(c);
+            if (!name) return null;
+            return {
+                id: iso || up(name), // stable id (prefer ISO)
+                name,                 // country display name
+                countryIso2: iso || undefined,
+            } as PreviewGeoCandidate;
+        })
+        .filter(Boolean) as PreviewGeoCandidate[];
 
-        // Merge & dedupe
-        const countryPills = dedupeBy(
-            [...apiCountryPills, ...countriesFromCitiesRaw],
-            (x) => (x.countryIso2 ? up(x.countryIso2) : up(x.id || x.name))
-        ).slice(0, 8); // keep list tight
-
-
-        // reset the active index whenever the suggestion set changes
+    // Merge & dedupe
+    const countryPills = dedupeBy(
+        [...apiCountryPills, ...countriesFromCitiesRaw],
+        (x) => (x.countryIso2 ? up(x.countryIso2) : up(x.id || x.name))
+    ).slice(0, 8); // keep list tight
 
 
-        useEffect(() => {
-            setActive(-1);
-        }, [cityPills.length, countryPills.length, trimmed]);
-
-        const hasSuggestions = countryPills.length > 0 || cityPills.length > 0;
-        const showSuggestions = focused && dirty && trimmed.length > 0 && hasSuggestions;
-        const showAmbiguity = dirty && previewResult !== null && !previewResult.canSearch;
+    // reset the active index whenever the suggestion set changes
 
 
+    useEffect(() => {
+        setActive(-1);
+    }, [cityPills.length, countryPills.length, trimmed]);
 
-        function onKeyDown(e: React.KeyboardEvent<HTMLInputElement>) {
-            if (!showSuggestions) return;
-            const total = countryPills.length + cityPills.length;
-            if (total === 0) return;
+    const hasSuggestions = countryPills.length > 0 || cityPills.length > 0;
+    const showSuggestions = focused && dirty && trimmed.length > 0 && hasSuggestions;
+    const showAmbiguity = dirty && previewResult !== null && !previewResult.canSearch;
 
-            if (e.key === 'ArrowDown') {
-                e.preventDefault();
-                setActive(i => (i + 1) % total);
-                return;
-            }
-            if (e.key === 'ArrowUp') {
-                e.preventDefault();
-                setActive(i => (i - 1 + total) % total);
-                return;
-            }
 
-            if (e.key === 'Enter') {
-                // Stage a pick only if the user actually navigated
-                if (active >= 0) {
-                    const all = [
-                        ...countryPills.map((c) => ({ t: 'country' as const, v: c })),
-                        ...cityPills.map((c) => ({ t: 'city' as const, v: c })),
-                    ];
-                    const pick = all[active];
-                    if (pick) {
-                        const tail = capturedKeywords(previewResult);
-                        const phrase = pick.t === 'city' ? cityPhrase(pick.v) : countryPhrase(pick.v);
-                        const { text: textValue, keywordTail: prunedTail } =
-                            applyGeoSuggestion(trimmed, phrase, tail, pick.v);
-                        const nextTail = prunedTail ?? '';
-                        setPendingPick({ ...pick, k: nextTail, text: textValue });
-                        if (pick.t === 'city') {
-                            onPreviewCity?.(pick.v, prunedTail);
-                        } else {
-                            onPreviewCountry?.(pick.v, prunedTail);
-                        }
-                        setDirty(false);
-                        setPreviewResult(null);
-                        setQ(textValue);
-                        refocusNoScroll();
-                    }
-                }
-                // Let the form submit to go through submit()
-            }
+
+    function onKeyDown(e: React.KeyboardEvent<HTMLInputElement>) {
+        if (!showSuggestions) return;
+        const total = countryPills.length + cityPills.length;
+        if (total === 0) return;
+
+        if (e.key === 'ArrowDown') {
+            e.preventDefault();
+            setActive(i => (i + 1) % total);
+            return;
+        }
+        if (e.key === 'ArrowUp') {
+            e.preventDefault();
+            setActive(i => (i - 1 + total) % total);
+            return;
         }
 
-        return (
-            <div className={`searchbar ${inline ? 'searchbar--inline' : ''} ${showSuggestions ? 'is-open' : ''}`}>
-                <form onSubmit={submit} className="searchbar__form">
-                    <div className="searchbar__field">
-                        <input
-                            ref={inputRef}
-                            type="search"
-                            placeholder="Search a country or city..."
-                            value={q}
-                            onChange={handleChange}
-                            onFocus={handleFocus}
-                            onBlur={handleBlur}
-                            onKeyDown={onKeyDown}
-                            aria-autocomplete="list"
-                            aria-expanded={showSuggestions}
-                        />
-                        {q && (
-                            <button
-                                type="button"
-                                className="searchbar__clear"
-                                aria-label="Clear"
-                                onMouseDown={(e) => e.preventDefault()}   // keep focus
-                                onClick={() => {
-                                    clearGeo();
-                                    setQ('');
-                                    setDirty(false);
-                                    setPreviewResult(null);
-                                }}
-                            >
-                                ×
-                            </button>
-                        )}
+        if (e.key === 'Enter') {
+            // Stage a pick only if the user actually navigated
+            if (active >= 0) {
+                const all = [
+                    ...countryPills.map((c) => ({ t: 'country' as const, v: c })),
+                    ...cityPills.map((c) => ({ t: 'city' as const, v: c })),
+                ];
+                const pick = all[active];
+                if (pick) {
+                    const tail = capturedKeywords(previewResult);
+                    const phrase = pick.t === 'city' ? cityPhrase(pick.v) : countryPhrase(pick.v);
+                    const { text: textValue, keywordTail: prunedTail } =
+                        applyGeoSuggestion(trimmed, phrase, tail, pick.v);
+                    const nextTail = prunedTail ?? '';
+                    setPendingPick({ ...pick, k: nextTail, text: textValue });
+                    if (pick.t === 'city') {
+                        onPreviewCity?.(pick.v, prunedTail);
+                    } else {
+                        onPreviewCountry?.(pick.v, prunedTail);
+                    }
+                    setDirty(false);
+                    setPreviewResult(null);
+                    setQ(textValue);
+                    refocusNoScroll();
+                }
+            }
+            // Let the form submit to go through submit()
+        }
+    }
 
-                        {showSuggestions && (
-                            <div className="searchbar__panel" role="listbox">
-                                {/* Countries (API + inferred from city matches) */}
-                                {countryPills.length > 0 && (
-                                    <div className="searchbar__group">
-                                        <div className="searchbar__group-title">Countries</div>
-                                        <ul className="searchbar__list">
-                                            {countryPills.map((country, idx) => {
-                                                const code = countryIsoOf(country);
-                                                const globalIndex = idx; // first block
-                                                const isActive = active === globalIndex;
-                                                return (
-                                                    <li key={`country-${country.id}`}>
-                                                        <button
-                                                            type="button"
-                                                            role="option"
-                                                            aria-selected={isActive}
-                                                            className={`searchbar__row ${isActive ? 'is-active' : ''}`}
-                                                            onMouseDown={handleSuggestionMouseDown}
-                                                            onMouseEnter={() => setActive(globalIndex)}
-                                                            onClick={() => selectCountry(country)}
-                                                        >
-                                                            <span className="searchbar__row-main">{country.name}</span>
-                                                            {code && <span className="searchbar__chip">{code}</span>}
-                                                        </button>
-                                                    </li>
-                                                );
-                                            })}
-                                        </ul>
-                                    </div>
-                                )}
+    return (
+        <div className={`searchbar ${inline ? 'searchbar--inline' : ''} ${showSuggestions ? 'is-open' : ''}`}>
+            <form onSubmit={submit} className="searchbar__form">
+                <div className="searchbar__field">
+                    <input
+                        ref={inputRef}
+                        type="search"
+                        placeholder="Search a country or city..."
+                        value={q}
+                        onChange={handleChange}
+                        onFocus={handleFocus}
+                        onBlur={handleBlur}
+                        onKeyDown={onKeyDown}
+                        aria-autocomplete="list"
+                        aria-expanded={showSuggestions}
+                    />
+                    {q && (
+                        <button
+                            type="button"
+                            className="searchbar__clear"
+                            aria-label="Clear"
+                            onMouseDown={(e) => e.preventDefault()}   // keep focus
+                            onClick={() => {
+                                onClearSearch?.();
+                                setQ('');
+                                setPendingPick(null);
+                                setDirty(false);
+                                setPreviewResult(null);
+                            }}
+                        >
+                            ×
+                        </button>
+                    )}
 
-                                {/* Cities (show country NAME under the city; ISO2 chip on right) */}
-                                {cityPills.length > 0 && (
-                                    <div className="searchbar__group">
-                                        <div className="searchbar__group-title">Cities</div>
-                                        <ul className="searchbar__list">
-                                            {cityPills.map((city, idx) => {
-                                                const globalIndex = countryPills.length + idx;
-                                                const isActive = active === globalIndex;
-                                                const cName = countryNameOf(city);
-                                                const cIso = countryIsoOf(city);
-                                                return (
-                                                    <li key={`city-${city.id}`}>
-                                                        <button
-                                                            type="button"
-                                                            role="option"
-                                                            aria-selected={isActive}
-                                                            className={`searchbar__row ${isActive ? 'is-active' : ''}`}
-                                                            onMouseDown={handleSuggestionMouseDown}
-                                                            onMouseEnter={() => setActive(globalIndex)}
-                                                            onClick={() => selectCity(city)}
-                                                        >
-                                                            <span className="searchbar__row-col">
-                                                                <span className="searchbar__row-main">{city.name}</span>
-                                                                {cName && <span className="searchbar__row-sub">{cName}</span>}
-                                                            </span>
-                                                            {cIso && <span className="searchbar__chip">{cIso}</span>}
-                                                        </button>
-                                                    </li>
-                                                );
-                                            })}
-                                        </ul>
-                                    </div>
-                                )}
-                            </div>
-                        )}
-                    </div>
-                    <button
-                        ref={actionRef}
-                        type="submit"
-                        className="searchbar__submit"
-                    >
-                        {isPreviewing && dirty ? 'Searching…' : 'Search'}
-                    </button>
-                </form>
+                    {showSuggestions && (
+                        <div className="searchbar__panel" role="listbox">
+                            {/* Countries (API + inferred from city matches) */}
+                            {countryPills.length > 0 && (
+                                <div className="searchbar__group">
+                                    <div className="searchbar__group-title">Countries</div>
+                                    <ul className="searchbar__list">
+                                        {countryPills.map((country, idx) => {
+                                            const code = countryIsoOf(country);
+                                            const globalIndex = idx; // first block
+                                            const isActive = active === globalIndex;
+                                            return (
+                                                <li key={`country-${country.id}`}>
+                                                    <button
+                                                        type="button"
+                                                        role="option"
+                                                        aria-selected={isActive}
+                                                        className={`searchbar__row ${isActive ? 'is-active' : ''}`}
+                                                        onMouseDown={handleSuggestionMouseDown}
+                                                        onMouseEnter={() => setActive(globalIndex)}
+                                                        onClick={() => selectCountry(country)}
+                                                    >
+                                                        <span className="searchbar__row-main">{country.name}</span>
+                                                        {code && <span className="searchbar__chip">{code}</span>}
+                                                    </button>
+                                                </li>
+                                            );
+                                        })}
+                                    </ul>
+                                </div>
+                            )}
 
-                {showAmbiguity && (
-                    <div className="searchbar__status">
-                        {previewResult?.kind === ScopeKind.CityInCountry
-                            ? 'Select a city to continue'
-                            : 'Refine your search to choose a location'}
-                    </div>
-                )}
-            </div>
-        );
+                            {/* Cities (show country NAME under the city; ISO2 chip on right) */}
+                            {cityPills.length > 0 && (
+                                <div className="searchbar__group">
+                                    <div className="searchbar__group-title">Cities</div>
+                                    <ul className="searchbar__list">
+                                        {cityPills.map((city, idx) => {
+                                            const globalIndex = countryPills.length + idx;
+                                            const isActive = active === globalIndex;
+                                            const cName = countryNameOf(city);
+                                            const cIso = countryIsoOf(city);
+                                            return (
+                                                <li key={`city-${city.id}`}>
+                                                    <button
+                                                        type="button"
+                                                        role="option"
+                                                        aria-selected={isActive}
+                                                        className={`searchbar__row ${isActive ? 'is-active' : ''}`}
+                                                        onMouseDown={handleSuggestionMouseDown}
+                                                        onMouseEnter={() => setActive(globalIndex)}
+                                                        onClick={() => selectCity(city)}
+                                                    >
+                                                        <span className="searchbar__row-col">
+                                                            <span className="searchbar__row-main">{city.name}</span>
+                                                            {cName && <span className="searchbar__row-sub">{cName}</span>}
+                                                        </span>
+                                                        {cIso && <span className="searchbar__chip">{cIso}</span>}
+                                                    </button>
+                                                </li>
+                                            );
+                                        })}
+                                    </ul>
+                                </div>
+                            )}
+                        </div>
+                    )}
+                </div>
+                <button
+                    ref={actionRef}
+                    type="submit"
+                    className="searchbar__submit"
+                >
+                    {isPreviewing && dirty ? 'Searching…' : 'Search'}
+                </button>
+            </form>
+
+            {showAmbiguity && (
+                <div className="searchbar__status">
+                    {previewResult?.kind === ScopeKind.CityInCountry
+                        ? 'Select a city to continue'
+                        : 'Refine your search to choose a location'}
+                </div>
+            )}
+        </div>
+    );
 }
 
 const whitespaceSplitter = /\s+/g;
@@ -1088,15 +1179,15 @@ function sanitizeQueryForApi(displayQ: string, pr: PreviewResponse | null): stri
 }
 
 function iso2FromPreview(pr: PreviewResponse | null): string | undefined {
-        const iso = (
-                pr?.outlineIso2
-                ?? (pr?.diagnostics?.['chosenIso2'] as string | undefined)
-                ?? pr?.cityMatches?.[0]?.countryIso2
-                ?? pr?.countryMatches?.[0]?.countryIso2
-                ?? ''
-            ).toUpperCase();
-        return iso || undefined;
-    }
+    const iso = (
+        pr?.outlineIso2
+        ?? (pr?.diagnostics?.['chosenIso2'] as string | undefined)
+        ?? pr?.cityMatches?.[0]?.countryIso2
+        ?? pr?.countryMatches?.[0]?.countryIso2
+        ?? ''
+    ).toUpperCase();
+    return iso || undefined;
+}
 function normalizeCountryName(iso2?: string | null, name?: string | null): string {
     const iso = (iso2 ?? '').toUpperCase();
     const raw = (name ?? '').trim();
@@ -1112,4 +1203,3 @@ function normalizeCountryName(iso2?: string | null, name?: string | null): strin
     }
     return raw;
 }
-

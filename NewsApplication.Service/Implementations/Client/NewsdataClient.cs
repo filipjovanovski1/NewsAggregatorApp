@@ -98,6 +98,7 @@ public sealed class NewsdataClient : INewsdataClient
 
         string? qTerm = null;
         string? localTerm = null;
+        string? citySlug = null;
 
         // Newsdata typically uses numeric "page" OR token "nextPage" depending on endpoint/version.
         if (!string.IsNullOrWhiteSpace(pageToken))
@@ -123,7 +124,7 @@ public sealed class NewsdataClient : INewsdataClient
                 case "country":
                     // newsdata expects ISO2 (lowercase). Keep whatever the resolver provided,
                     // but normalize to lower to be safe.
-                                        {
+                    {
                         qp.Add($"country={Uri.EscapeDataString(
                         (rawVal ?? string.Empty).ToLowerInvariant())}");
                     }
@@ -142,24 +143,79 @@ public sealed class NewsdataClient : INewsdataClient
                 case "local":
                     localTerm = string.IsNullOrWhiteSpace(localTerm) ? rawVal : $"{localTerm} {rawVal}";
                     break;
+                case "city":
+                    // capture slug to recover the primary (Latin) city name
+                    citySlug = rawVal;
+                    break;
             }
         }
         // inside BuildUrl after collecting localTerm and qTerm
         string? combinedQ = null;
-        var terms = new[] { localTerm?.Trim(), qTerm?.Trim() }
-            .Where(s => !string.IsNullOrWhiteSpace(s))
-            .Select(s => s!)
-            .ToArray();
 
-        if (terms.Length == 1)
+        // Derive English/Latin city name from slug (city:skopje-mk -> "skopje")
+        string? cityNameFromSlug = null;
+        if (!string.IsNullOrWhiteSpace(citySlug))
         {
-            combinedQ = terms[0];
+            var slug = citySlug.Trim();
+            // drop trailing "-xx" (iso2) if present
+            var maybeName = slug;
+            if (slug.Length > 3 && slug[^3] == '-' && slug[^2..].All(char.IsLetter))
+            {
+                maybeName = slug[..^3];
+            }
+            cityNameFromSlug = maybeName.Replace('-', ' ').Trim();
         }
-        else if (terms.Length > 1)
+
+        string? keywords = null;
+        string? englishForOr = null;
+
+        if (!string.IsNullOrWhiteSpace(qTerm))
         {
-            // Explicit OR so Newsdata matches either local or Latin forms instead of concatenated text
-            combinedQ = $"({terms[0]}) OR ({terms[1]})";
+            var qt = qTerm.Trim();
+            if (!string.IsNullOrWhiteSpace(cityNameFromSlug))
+            {
+                var cityNorm = cityNameFromSlug.ToLowerInvariant();
+                var qtNorm = qt.ToLowerInvariant();
+                if (qtNorm.StartsWith(cityNorm))
+                {
+                    keywords = qt[cityNameFromSlug.Length..].Trim();
+                    englishForOr = cityNameFromSlug;
+                }
+                else
+                {
+                    keywords = qt;
+                    englishForOr = cityNameFromSlug;
+                }
+            }
+            else
+            {
+                keywords = qt;
+            }
         }
+
+        // Build combined query:
+        // - If localTerm and englishForOr exist: "(local) OR (english)" + " " + keywords
+        // - Else fallback to localTerm or qTerm keywords
+        List<string> parts = new();
+        if (!string.IsNullOrWhiteSpace(localTerm) && !string.IsNullOrWhiteSpace(englishForOr))
+        {
+            parts.Add($"({localTerm.Trim()}) OR ({englishForOr.Trim()})");
+        }
+        else if (!string.IsNullOrWhiteSpace(localTerm))
+        {
+            parts.Add(localTerm.Trim());
+        }
+        else if (!string.IsNullOrWhiteSpace(englishForOr))
+        {
+            parts.Add(englishForOr.Trim());
+        }
+
+        if (!string.IsNullOrWhiteSpace(keywords))
+        {
+            parts.Add(keywords.Trim());
+        }
+
+        combinedQ = string.Join(' ', parts.Where(p => !string.IsNullOrWhiteSpace(p)));
 
         if (!string.IsNullOrWhiteSpace(combinedQ))
         {
