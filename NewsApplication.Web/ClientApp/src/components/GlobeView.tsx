@@ -1,4 +1,5 @@
 ﻿import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
+import type React from 'react';
 import Globe from 'react-globe.gl';
 
 /* ---------- Minimal types we actually use ---------- */
@@ -47,21 +48,14 @@ type GlobeApi = {
 
 interface Props {
     onPick: (lat: number, lng: number) => void;
-    /** Called when a country polygon is clicked (ISO-2 provided). */
     onPickCountry?: (iso2: string, iso3: string | null, name: string | null, lat: number, lng: number) => void;
     focus?: { lat: number; lng: number; altitude?: number } | null;
-    /** ISO-2 of country to outline (e.g. "FR"). Pass null/undefined to clear. */
     highlightIso2?: string | null;
-    /** City marker coordinates; pass null/undefined to hide. */
     cityMarker?: Point | null;
-    /** Array of city markers (takes precedence over cityMarker when provided). */
     cityMarkers?: Point[] | null;
-    /** Hovered city markers for overlays. */
-    hoverCities?: { lat: number; lng: number; label?: string | null }[] | null;
-    /** Click handler for labels/markers. */
     onLabelClick?: (point: Point) => void;
-    /** Hover handler for a country polygon (ISO-2) when outline is present. */
     onCountryHover?: (iso2: string | null) => void;
+    onPointHover?: (isHovering: boolean) => void;
 }
 
 export default function GlobeView({
@@ -71,10 +65,9 @@ export default function GlobeView({
     highlightIso2,
     cityMarker,
     cityMarkers,
-    hoverCities,
     onLabelClick,
     onCountryHover,
-
+    onPointHover,
 }: Props) {
     const globeRef = useRef<GlobeApi | null>(null);
     const wrapRef = useRef<HTMLDivElement>(null);
@@ -115,7 +108,7 @@ export default function GlobeView({
         return () => ro.disconnect();
     }, []);
 
-    // Load countries once from /public/data (file can be .json or .geojson)
+    // Load countries once from /public/data
     useEffect(() => {
         let cancelled = false;
         (async () => {
@@ -133,7 +126,7 @@ export default function GlobeView({
         };
     }, []);
 
-    // Uppercase string value of a property, tolerant of unknowns
+    // Uppercase string value of a property
     function upOf(props: Record<string, unknown>, key: string): string {
         const v = props[key];
         if (v == null) return '';
@@ -156,7 +149,6 @@ export default function GlobeView({
         return '';
     }
 
-    // Return the first non-empty uppercased value among keys
     const firstUp = useCallback((props: Record<string, unknown>, keys: string[]): string => {
         for (const k of keys) {
             const v = upOf(props, k);
@@ -165,26 +157,21 @@ export default function GlobeView({
         return '';
     }, []);
 
-
-
-    // Extract ISO-2 (handles Natural Earth "-99" quirk)
     const getIso = useCallback((props: Record<string, unknown> | undefined): string => {
         if (!props) return '';
 
         const ISO_A2 = upOf(props, 'ISO_A2');
         const ISO_A2_EH = upOf(props, 'ISO_A2_EH');
 
-        // Prefer true A2; NE sometimes uses -99 and stores usable code in ISO_A2_EH
         let iso = (!ISO_A2 || ISO_A2 === '-99') ? ISO_A2_EH : ISO_A2;
 
-        // Fallbacks (some datasets put codes in alternative fields)
         if (!iso) {
             iso = firstUp(props, [
-                'iso_a2',     // lower-case variant
-                'ISO2',       // generic alt
+                'iso_a2',
+                'ISO2',
                 'iso2',
-                'ISO',        // generic alt (be cautious)
-                'ADM0_A3',    // last-resort: often ISO-3; only as a fallback to avoid empty
+                'ISO',
+                'ADM0_A3',
                 'adm0_a3'
             ]);
         }
@@ -195,18 +182,16 @@ export default function GlobeView({
         if (!props) return null;
 
         const a3 = firstUp(props, [
-            'ISO_A3',      // standard
-            'iso_a3',      // lower-case variant
-            'ADM0_A3',     // Natural Earth commonly has this
+            'ISO_A3',
+            'iso_a3',
+            'ADM0_A3',
             'adm0_a3'
         ]);
 
         return a3 || null;
     }, [firstUp]);
 
-    // IMPORTANT: polyData only contains the highlighted country's features.
-    // This means onPolygonClick ONLY fires when clicking the highlighted country.
-    // Clicking anywhere else (including other countries) triggers onGlobeClick → onPick → reverse lookup
+    // Set polygon data to only the highlighted country
     useEffect(() => {
         const isoWanted = highlightIso2?.toUpperCase();
         if (!isoWanted || !allFeatures || allFeatures.length === 0) {
@@ -217,7 +202,7 @@ export default function GlobeView({
         setPolyData(matches);
     }, [highlightIso2, allFeatures, getIso]);
 
-    // City markers: prefer array; fallback to single marker
+    // Process city markers - prevent unnecessary updates by checking if data actually changed
     useEffect(() => {
         const normalize = (m?: Point | null): Point | null =>
             m && Number.isFinite(m.lat) && Number.isFinite(m.lng)
@@ -232,22 +217,29 @@ export default function GlobeView({
                     population: m.population ?? null
                 }
                 : null;
+
+        // If we have an array of markers, use those (hover cities)
         if (Array.isArray(cityMarkers) && cityMarkers.length > 0) {
             const good = cityMarkers.map(normalize).filter(Boolean) as Point[];
+
             setPoints(good);
-            setHoverLabel(null);
+
             return;
         }
 
+        // Single marker case (selected city)
         const single = normalize(cityMarker);
         if (single) {
-            setPoints([single]);
-
+            setPoints(prev => {
+                if (prev.length === 1 && prev[0].id === single.id) {
+                    return prev; // Same marker, don't update
+                }
+                return [single];
+            });
+            // For single marker, show its label immediately
             setHoverLabel(single);
-
         } else {
-            setPoints([]);
-
+            setPoints(prev => prev.length === 0 ? prev : []);
             setHoverLabel(null);
         }
     }, [cityMarkers, cityMarker]);
@@ -306,27 +298,20 @@ export default function GlobeView({
         return { lat: 0, lng: 0 };
     };
 
+    // Determine if we should show hover labels (only for arrays of markers)
+    const shouldShowHoverLabels = Array.isArray(cityMarkers) && cityMarkers.length > 1;
+
     return (
         <div ref={wrapRef} className="globe-wrap">
-            {/* 
-                CLICK BEHAVIOR:
-                
-                1. Clicking the HIGHLIGHTED POLYGON (green outline):
-                   → onPolygonClick fires → calls onPickCountry
-                   
-                2. Clicking ANYWHERE ELSE (ocean, other countries):
-                   → onGlobeClick fires → calls onPick → reverse lookup
-                   
-                The highlighted country does NOT constrain other clicks.
-            */}
-            <Globe ref={globeRef as unknown as React.RefObject<GlobeApi>}
+            <Globe
+                ref={globeRef as unknown as React.RefObject<GlobeApi>}
                 width={size.w}
                 height={size.h}
-                // Clicking anywhere NOT on the highlighted polygon → reverse lookup
+                pointLabel={() => ''}
+                // Clicking anywhere NOT on the highlighted polygon
                 onGlobeClick={({ lat, lng }: { lat: number; lng: number }) => onPick(lat, lng)}
-                // Clicking the HIGHLIGHTED polygon → search for that country
+                // Clicking the HIGHLIGHTED polygon
                 onPolygonClick={(poly: Feature, _evt: unknown, extra?: { lat: number; lng: number }) => {
-                    // Extract country info from the CLICKED polygon (not from highlightIso2 state)
                     const c = extra && Number.isFinite(extra.lat) && Number.isFinite(extra.lng)
                         ? { lat: extra.lat, lng: extra.lng }
                         : centroidFromFeature(poly);
@@ -342,21 +327,17 @@ export default function GlobeView({
                     ]) || null;
 
                     if (iso2 && typeof onPickCountry === 'function') {
-                        // Search for the country that was clicked (from poly.properties)
                         onPickCountry(iso2, iso3, name, c.lat, c.lng);
                     } else {
-                        // Fallback to reverse lookup if no ISO2 found
                         onPick(c.lat, c.lng);
                     }
                 }}
-
                 onPolygonHover={(poly?: Feature) => {
                     if (onCountryHover) {
                         const iso2 = poly ? getIso(poly?.properties) : null;
                         onCountryHover(iso2 || null);
                     }
                 }}
-
                 rendererConfig={{ alpha: true, antialias: true }}
                 backgroundColor="rgba(0,0,0,0)"
                 globeImageUrl="//unpkg.com/three-globe/example/img/earth-blue-marble.jpg"
@@ -364,13 +345,13 @@ export default function GlobeView({
                 showAtmosphere
                 atmosphereColor="lightskyblue"
                 atmosphereAltitude={0.25}
-                // Country outline (stroke only) - ONLY the highlighted country
+                // Country outline (only the highlighted country)
                 polygonsData={polyData}
                 polygonAltitude={() => 0.01}
                 polygonCapColor={() => 'rgba(0,0,0,0)'}
                 polygonSideColor={() => 'rgba(0,0,0,0)'}
                 polygonStrokeColor={() => '#39FF14'}
-                // City dot(s)
+                // City dots
                 pointsData={points}
                 pointLat="lat"
                 pointLng="lng"
@@ -386,44 +367,49 @@ export default function GlobeView({
                     if (wrapRef.current) {
                         wrapRef.current.style.cursor = p ? 'pointer' : '';
                     }
-                   
-                }}
-                // Labels (only show the hovered point's label to avoid clutter)
-                labelsData={hoverLabel ? [hoverLabel] : []}
-                labelLat="lat"
-                labelLng="lng"
-                labelText="label"
-                labelSize={() => 1.0}
-                labelColor={() => '#FFFFFF'}
-                labelAltitude={0.03} labelDotRadius={0.2}
-                labelsTransitionDuration={300}
-                onLabelHover={(label?: unknown) => {
-                    if (wrapRef.current) wrapRef.current.style.cursor = label ? 'pointer' : '';
-                    setHoverLabel(label ? (label as Point) : null);
-                }}
-                onLabelClick={(label?: unknown) => {
-                    if (onLabelClick && label && typeof label === 'object') {
-                        onLabelClick(label as Point);
+
+                    // Notify parent about point hover state
+                    if (onPointHover) {
+                        onPointHover(!!p);
+                    }
+
+                    // Update hover label if we're showing multiple markers
+                    if (shouldShowHoverLabels) {
+                        setHoverLabel(p ? (p as Point) : null);
                     }
                 }}
-                htmlElementsData={hoverCities && hoverCities.length ? hoverCities : []}
+               
+                // HTML labels (only show the hovered point's label)
+                htmlElementsData={hoverLabel ? [hoverLabel] : []}
                 htmlLat="lat"
                 htmlLng="lng"
                 htmlElement={(p: unknown) => {
                     const point = p as Point;
+
+                    const cityOnly = (() => {
+                        const raw = (point.name ?? point.label ?? '').trim();
+                        if (!raw) return '';
+                        return raw.split(',')[0].trim(); // "Saint Petersburg, Russian Federation" -> "Saint Petersburg"
+                    })();
+
                     const el = document.createElement('div');
                     el.className = 'globe-html-label';
+
                     const span = document.createElement('span');
-                    span.textContent = point.label ?? '';
+                    span.textContent = cityOnly;
                     el.appendChild(span);
+
+                    el.onmouseenter = () => onPointHover?.(true);
+                    el.onmouseleave = () => onPointHover?.(false);
+
                     el.onclick = (evt) => {
                         evt.stopPropagation();
-                        if (onLabelClick) {
-                            onLabelClick(point);
-                        }
+                        onLabelClick?.(point);
                     };
+
                     return el;
                 }}
+
             />
         </div>
     );

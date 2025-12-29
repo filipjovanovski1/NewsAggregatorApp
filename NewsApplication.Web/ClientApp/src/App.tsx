@@ -1,4 +1,4 @@
-﻿import { useCallback, useEffect, useState } from 'react';
+﻿import React, { useCallback, useEffect, useState, useRef } from 'react';
 import SearchBar, { type GeoPickContext } from './components/SearchBar';
 import GlobeView from './components/GlobeView';
 import ArticleOverlay from './components/ArticleOverlay';
@@ -9,7 +9,6 @@ import {
     reverseScope,
     searchArticles,
     prewarm,
-    //preview,
     fetchTopCities,
     toArticleDto,
     type ResolveScopeResponse,
@@ -21,11 +20,9 @@ const UI_PAGE_SIZE = 6;
 const whitespaceSplitter = /\s+/;
 
 const formatLabel = (res: ResolveScopeResponse): string => {
-    if (res.kind === 'city') {
-        return res.countryIso2 ? `${res.label}, ${res.countryIso2}` : res.label;
-    }
     return res.label;
 };
+
 function sanitizeCityKeywords(
     query: string | undefined,
     candidate: PreviewGeoCandidate
@@ -99,7 +96,7 @@ export default function App() {
     const [hoverCities, setHoverCities] = useState<CityPoint[]>([]);
 
     const [hoverIso, setHoverIso] = useState<string | null>(null);
-    const [hoveringHighlight, setHoveringHighlight] = useState(false);
+    const isHoveringPointRef = useRef(false);
 
     const normalize = useCallback(
         (s: string) => s.trim().toLowerCase().replace(/\s+/g, ' '),
@@ -287,6 +284,7 @@ export default function App() {
             syncVisuals(globeSel);
         }
     }
+
     function onSearchEdit() {
         setSearchSel(null);
         setHighlightIso2(null);
@@ -423,7 +421,7 @@ export default function App() {
             const lat = candidate.lat;
             const lng = candidate.lng;
             if (isFiniteNumber(lat) && isFiniteNumber(lng)) {
-               const countryLabel = candidate.countryName ?? candidate.countryIso2 ?? undefined;
+                const countryLabel = candidate.countryName ?? candidate.countryIso2 ?? undefined;
                 const label = countryLabel ? `${candidate.name ?? ''}, ${countryLabel}`.trim().replace(/^,\s*/, '') : candidate.name ?? undefined;
                 setCityMarker({ lat, lng, label });
                 setFocus({ lat, lng, altitude: 1.6 });
@@ -490,15 +488,59 @@ export default function App() {
         }
     }, [onSearch, resolveAndLoad]);
 
+    // Modified: Don't clear hoverIso if we're hovering a point
+    const clearHoverTimerRef = useRef<number | null>(null);
+
     const handleCountryHover = useCallback((iso2: string | null) => {
         const next = iso2 ? iso2.toUpperCase() : null;
-        setHoverIso(next);
+
+        // Always cancel any pending clear when we get a real ISO
+        if (next) {
+            if (clearHoverTimerRef.current != null) {
+                window.clearTimeout(clearHoverTimerRef.current);
+                clearHoverTimerRef.current = null;
+            }
+            setHoverIso(next);
+            return;
+        }
+
+        // If null, debounce the clear so point/label hover can “win”
+        if (clearHoverTimerRef.current != null) {
+            window.clearTimeout(clearHoverTimerRef.current);
+        }
+
+        clearHoverTimerRef.current = window.setTimeout(() => {
+            clearHoverTimerRef.current = null;
+
+            // Only clear if we’re not hovering a point/label
+            if (!isHoveringPointRef.current) {
+                setHoverIso(null);
+            }
+        }, 120);
     }, []);
 
     useEffect(() => {
+        return () => {
+            if (clearHoverTimerRef.current != null) window.clearTimeout(clearHoverTimerRef.current);
+        };
+    }, []);
+
+
+    // Track when we're hovering over a point (using ref to avoid re-renders)
+    const handlePointHover = useCallback((isHovering: boolean) => {
+        isHoveringPointRef.current = isHovering;
+    }, []);
+
+    // Load top cities when hovering over the highlighted country
+    useEffect(() => {
         let cancelled = false;
-        const isSame = hoverIso && highlightIso2 && hoverIso.toUpperCase() === highlightIso2.toUpperCase();
-        setHoveringHighlight(Boolean(isSame));
+
+        // Check if we're hovering the same country that's highlighted
+        const isHoveringHighlight =
+            hoverIso &&
+            highlightIso2 &&
+            hoverIso.toUpperCase() === highlightIso2.toUpperCase();
+
         const loadTopCities = async (iso2: string) => {
             try {
                 const top = await loadTopCitiesForHover(iso2, fetchTopCities);
@@ -509,7 +551,7 @@ export default function App() {
             }
         };
 
-        if (isSame && hoverIso) {
+        if (isHoveringHighlight && hoverIso) {
             void loadTopCities(hoverIso);
         } else {
             setHoverCities([]);
@@ -517,6 +559,19 @@ export default function App() {
 
         return () => { cancelled = true; };
     }, [hoverIso, highlightIso2]);
+
+    // Determine which city markers to show
+    const effectiveCityMarkers = React.useMemo(() => {
+        const isHoveringHighlight =
+            hoverIso &&
+            highlightIso2 &&
+            hoverIso.toUpperCase() === highlightIso2.toUpperCase();
+
+        if (isHoveringHighlight && hoverCities.length > 0) {
+            return hoverCities;
+        }
+        return cityMarkers;
+    }, [hoverIso, highlightIso2, hoverCities, cityMarkers]);
 
     return (
         <div className="app">
@@ -544,10 +599,10 @@ export default function App() {
                         focus={focus}
                         highlightIso2={highlightIso2}
                         cityMarker={cityMarker ?? (activeSel?.kind === 'city' ? cityMarker : null)}
-                        cityMarkers={hoveringHighlight ? hoverCities : cityMarkers}
-                        hoverCities={hoverCities}
+                        cityMarkers={effectiveCityMarkers}
                         onLabelClick={handleMarkerClick}
                         onCountryHover={handleCountryHover}
+                        onPointHover={handlePointHover}
                     />
                 </div>
             </div>
