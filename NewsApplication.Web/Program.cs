@@ -14,13 +14,27 @@ using NewsApplication.Service.Interfaces;
 using NewsApplication.Service.Interfaces.Client;
 using NewsApplication.Service.Interfaces.Ingestion;
 using Npgsql;
+using System.Collections.Generic;
+using System.Linq;
+using System.Security.Cryptography;
+using System.Text;
 
 var builder = WebApplication.CreateBuilder(args);
+
+var corsOrigins = new List<string>
+{
+    "http://localhost:5173",
+    "https://localhost:5173"
+};
+
+var configuredOrigins = builder.Configuration.GetSection("Cors:AllowedOrigins").Get<string[]>() ?? Array.Empty<string>();
+corsOrigins.AddRange(configuredOrigins.Where(o => !string.IsNullOrWhiteSpace(o)));
+
 
 builder.Services.AddCors(opts =>
 {
     opts.AddPolicy("Client", p => p
-        .WithOrigins("http://localhost:5173", "https://localhost:5173")
+        .WithOrigins(corsOrigins.Distinct().ToArray())
         .AllowAnyHeader()
         .AllowAnyMethod()
         .AllowCredentials());
@@ -86,9 +100,12 @@ if (app.Environment.IsDevelopment())
 }
 app.UseCors("Client");
 
+var applyMigrations = builder.Configuration.GetValue<bool?>("Database:ApplyMigrationsOnStartup") ?? true;
+
 // dev: auto-apply migrations (keep your block)
-using (var scope = app.Services.CreateScope())
+if (applyMigrations)
 {
+    using var scope = app.Services.CreateScope();
     var db = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
     db.Database.Migrate();
 }
@@ -105,6 +122,56 @@ app.MapGet("/_routes", (IEnumerable<EndpointDataSource> sources) =>
         });
     return Results.Ok(routes);
 });
+
+
+
+var devEnabled = builder.Configuration.GetValue<bool>("Dev:Enabled", builder.Environment.IsDevelopment());
+var devToken = builder.Configuration["Dev:AdminToken"]; // from env/secrets
+
+app.Use(async (ctx, next) =>
+{
+    if (ctx.Request.Path.StartsWithSegments("/dev", StringComparison.OrdinalIgnoreCase))
+    {
+        // If disabled -> pretend it doesn't exist
+        if (!devEnabled)
+        {
+            ctx.Response.StatusCode = StatusCodes.Status404NotFound;
+            return;
+        }
+
+        // Require token (you can also require it in Development if you want)
+        if (string.IsNullOrWhiteSpace(devToken))
+        {
+            ctx.Response.StatusCode = StatusCodes.Status500InternalServerError;
+            await ctx.Response.WriteAsync("Dev admin token not configured.");
+            return;
+        }
+
+        // Read header
+        if (!ctx.Request.Headers.TryGetValue("X-Dev-Token", out var provided))
+        {
+            ctx.Response.StatusCode = StatusCodes.Status401Unauthorized;
+            return;
+        }
+
+        // Constant-time compare (prevents timing leaks)
+        if (!FixedTimeEquals(provided.ToString(), devToken))
+        {
+            ctx.Response.StatusCode = StatusCodes.Status401Unauthorized;
+            return;
+        }
+    }
+
+    await next();
+});
+
+static bool FixedTimeEquals(string a, string b)
+{
+    var ba = Encoding.UTF8.GetBytes(a);
+    var bb = Encoding.UTF8.GetBytes(b);
+    return ba.Length == bb.Length && CryptographicOperations.FixedTimeEquals(ba, bb);
+}
+
 
 app.MapControllers();
 app.Run();

@@ -1,0 +1,24 @@
+**/bin/
+**/obj/
+**/.vs/
+**/node_modules/
+**/dist/
+**/.vite/
+.docker/
+deploy/
+
+# secrets
+.env
+**/.env
+.env.*
+**/.env.*
+
+# local docker/postgres volumes (HUGE + never needed in image build)
+.docker/**/data/
+.docker/**/pg_wal/
+.docker/**/pg_stat/
+.docker/**/postmaster.pid
+
+# common noise
+.git
+.vscode

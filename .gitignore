@@ -375,3 +375,33 @@ FodyWeavers.xsd
 *.zip
 *.log
 
+# Env files (secrets)
+.env
+.env.*
+!.env.example
+
+# .NET / Visual Studio build output
+bin/
+obj/
+.vs/
+*.user
+*.suo
+
+# Node / frontend
+node_modules/
+dist/
+build/
+coverage/
+npm-debug.log*
+yarn-debug.log*
+pnpm-debug.log*
+
+# OS / misc
+.DS_Store
+Thumbs.db
+*.log
+
+.docker/**/data/
+.docker/**/pg_wal/
+.docker/**/pg_stat/
+.docker/**/postmaster.pid

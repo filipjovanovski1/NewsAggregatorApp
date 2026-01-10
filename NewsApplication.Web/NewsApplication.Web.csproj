@@ -6,6 +6,12 @@
 		<ImplicitUsings>enable</ImplicitUsings>
 	</PropertyGroup>
 
+	<ItemGroup>
+		<Compile Remove="ClientApp\Dockerfile" />
+		<Compile Remove="ClientApp\nginx.conf" />
+		<Compile Remove="Dockerfile" />
+	</ItemGroup>
+
 	<!-- Link the CSVs from the Repository project and copy them to output -->
 	<ItemGroup>
 		<Content Include="..\NewsApplication.Repository\Data\List_of_countries_with_ISO3.csv" Link="Data\List_of_countries_with_ISO3.csv">
@@ -44,6 +50,12 @@
 	<!-- Let MSBuild treat vite.config.ts as TS (optional for your workflow) -->
 	<ItemGroup>
 		<TypeScriptCompile Include="ClientApp\vite.config.ts" />
+	</ItemGroup>
+
+	<ItemGroup>
+		<None Include="ClientApp\Dockerfile" />
+		<None Include="ClientApp\nginx.conf" />
+		<None Include="Dockerfile" />
 	</ItemGroup>
 
 </Project>

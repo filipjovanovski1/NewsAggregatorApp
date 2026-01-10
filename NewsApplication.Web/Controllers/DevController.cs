@@ -23,8 +23,7 @@ public sealed class DevController : ControllerBase
         [FromServices] IWebHostEnvironment env,
         CancellationToken ct)
     {
-        var repoData = Path.GetFullPath(Path.Combine(env.ContentRootPath, "..", "NewsApplication.Repository", "Data"));
-        var path = Path.Combine(repoData, "List_of_countries_with_ISO3.csv");
+        var path = Path.Combine(env.ContentRootPath, "Data", "List_of_countries_with_ISO3.csv");
         var (count, errs) = await importer.ImportAsync(path, ct);
         return Ok(new { Upserted = count, Errors = errs });
     }
@@ -37,8 +36,7 @@ public sealed class DevController : ControllerBase
     {
         try
         {
-            var repoData = Path.GetFullPath(Path.Combine(env.ContentRootPath, "..", "NewsApplication.Repository", "Data"));
-            var path = Path.Combine(repoData, "List_of_cities.csv");
+            var path = Path.Combine(env.ContentRootPath, "Data", "List_of_cities.csv");
             if (!System.IO.File.Exists(path)) return NotFound(new { File = path });
 
             var (count, errs) = await importer.ImportAsync(path, ct);

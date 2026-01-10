@@ -16,7 +16,11 @@
       "launchBrowser": true,
       "applicationUrl": "https://localhost:7146",
       "environmentVariables": {
-        "ASPNETCORE_ENVIRONMENT": "Development"
+        "ASPNETCORE_ENVIRONMENT": "Development",
+        "ConnectionStrings__Default": "Host=localhost;Port=5433;Database=newsapp;Username=newsapp;Password=devpass;Include Error Detail=true",
+        "Dev__Enabled": "true",
+        "Dev__AdminToken": "ISXH@#33213#JHiS",
+        "Newsdata__ApiKey": "pub_c98c676e1fe145ef9e566062051c38a1"
       }
     },
     "IIS Express": {
