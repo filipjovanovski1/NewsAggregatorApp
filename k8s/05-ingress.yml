@@ -4,10 +4,49 @@ metadata:
   name: newsapp
   namespace: newsapp
 spec:
+  ingressClassName: nginx
   rules:
     - host: newsapp.local
       http:
         paths:
+          # API routes (NO /api prefix)
+          - path: /_routes
+            pathType: Prefix
+            backend:
+              service:
+                name: newsapp-api
+                port:
+                  number: 8080
+          - path: /dev
+            pathType: Prefix
+            backend:
+              service:
+                name: newsapp-api
+                port:
+                  number: 8080
+          - path: /scope
+            pathType: Prefix
+            backend:
+              service:
+                name: newsapp-api
+                port:
+                  number: 8080
+          - path: /search
+            pathType: Prefix
+            backend:
+              service:
+                name: newsapp-api
+                port:
+                  number: 8080
+          - path: /articles
+            pathType: Prefix
+            backend:
+              service:
+                name: newsapp-api
+                port:
+                  number: 8080
+
+          # OPTIONAL: keep /api/* working too
           - path: /api
             pathType: Prefix
             backend:
@@ -15,6 +54,8 @@ spec:
                 name: newsapp-api
                 port:
                   number: 8080
+
+          # Frontend
           - path: /
             pathType: Prefix
             backend:

@@ -8,6 +8,7 @@
     type Ref,
 } from 'react';
 import { preview, ScopeKind, type PreviewGeoCandidate, type PreviewResponse } from '../api';
+import { safeRandomUUID } from "../utils/safeRandomUUID"; // adjust path if your utils folder differs
 
 export type GeoPickContext = {
     fullText: string;
@@ -235,7 +236,7 @@ export default function SearchBar({
         let text = trimmed;
         hasInteractedRef.current = true;
 
-        const flowId = crypto.randomUUID();         //CHECK
+        const flowId = safeRandomUUID();        //CHECK
         type FlowExtra = Record<string, unknown> | undefined;
 
         const flag = (code: string, extra?: FlowExtra) => {           //CHECK
