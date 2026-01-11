@@ -405,3 +405,6 @@ Thumbs.db
 .docker/**/pg_wal/
 .docker/**/pg_stat/
 .docker/**/postmaster.pid
+
+
+k8s/01-secrets.local.yml
