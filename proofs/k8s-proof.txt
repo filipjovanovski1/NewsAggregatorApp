@@ -1,0 +1,176 @@
+NAME                               READY   STATUS    RESTARTS       AGE
+pod/newsapp-api-7df5974597-h8dkt   1/1     Running   0              31m
+pod/newsapp-web-976b74cc-2dzk7     1/1     Running   10 (60m ago)   29d
+pod/postgres-0                     1/1     Running   6 (60m ago)    29d
+
+NAME                  TYPE        CLUSTER-IP      EXTERNAL-IP   PORT(S)    AGE
+service/api           ClusterIP   10.97.213.187   <none>        8080/TCP   29d
+service/newsapp-api   ClusterIP   10.96.111.211   <none>        8080/TCP   29d
+service/newsapp-web   ClusterIP   10.98.29.65     <none>        80/TCP     29d
+service/postgres      ClusterIP   10.96.41.15     <none>        5432/TCP   29d
+
+NAME                          READY   UP-TO-DATE   AVAILABLE   AGE
+deployment.apps/newsapp-api   1/1     1            1           29d
+deployment.apps/newsapp-web   1/1     1            1           29d
+
+NAME                                     DESIRED   CURRENT   READY   AGE
+replicaset.apps/newsapp-api-5586b5495f   0         0         0       29d
+replicaset.apps/newsapp-api-5c69d9887f   0         0         0       29d
+replicaset.apps/newsapp-api-5c848f5585   0         0         0       29d
+replicaset.apps/newsapp-api-668bfdbd47   0         0         0       31m
+replicaset.apps/newsapp-api-67f5566476   0         0         0       29d
+replicaset.apps/newsapp-api-74999f56b    0         0         0       29d
+replicaset.apps/newsapp-api-74b4444954   0         0         0       29d
+replicaset.apps/newsapp-api-75b7f755fb   0         0         0       29d
+replicaset.apps/newsapp-api-7c8c97ccf8   0         0         0       29d
+replicaset.apps/newsapp-api-7df5974597   1         1         1       31m
+replicaset.apps/newsapp-api-85f44f5f45   0         0         0       29d
+replicaset.apps/newsapp-web-67c947c55d   0         0         0       29d
+replicaset.apps/newsapp-web-6957f7f486   0         0         0       29d
+replicaset.apps/newsapp-web-7c847b4754   0         0         0       29d
+replicaset.apps/newsapp-web-976b74cc     1         1         1       29d
+
+NAME                        READY   AGE
+statefulset.apps/postgres   1/1     29d
+
+---
+
+NAME      CLASS   HOSTS           ADDRESS     PORTS   AGE
+newsapp   nginx   newsapp.local   localhost   80      29d
+
+---
+
+Name:             newsapp
+Labels:           <none>
+Namespace:        newsapp
+Address:          localhost
+Ingress Class:    nginx
+Default backend:  <default>
+Rules:
+  Host           Path  Backends
+  ----           ----  --------
+  newsapp.local  
+                 /_routes    newsapp-api:8080 (10.1.0.84:8080)
+                 /dev        newsapp-api:8080 (10.1.0.84:8080)
+                 /scope      newsapp-api:8080 (10.1.0.84:8080)
+                 /search     newsapp-api:8080 (10.1.0.84:8080)
+                 /articles   newsapp-api:8080 (10.1.0.84:8080)
+                 /api        newsapp-api:8080 (10.1.0.84:8080)
+                 /           newsapp-web:80 (10.1.0.79:80)
+Annotations:     <none>
+Events:
+  Type    Reason  Age   From                      Message
+  ----    ------  ----  ----                      -------
+  Normal  Sync    16d   nginx-ingress-controller  Scheduled for sync
+  Normal  Sync    99m   nginx-ingress-controller  Scheduled for sync
+  Normal  Sync    60m   nginx-ingress-controller  Scheduled for sync
+
+---
+
+LAST SEEN   TYPE     REASON              OBJECT                              MESSAGE
+32m         Normal   Scheduled           pod/newsapp-api-668bfdbd47-hk6m5    Successfully assigned newsapp/newsapp-api-668bfdbd47-hk6m5 to docker-desktop
+32m         Normal   SuccessfulCreate    replicaset/newsapp-api-668bfdbd47   Created pod: newsapp-api-668bfdbd47-hk6m5
+32m         Normal   ScalingReplicaSet   deployment/newsapp-api              Scaled up replica set newsapp-api-668bfdbd47 from 0 to 1
+32m         Normal   Pulling             pod/newsapp-api-668bfdbd47-hk6m5    Pulling image "filipjovanovski1/newsapp-api:latest"
+32m         Normal   Pulled              pod/newsapp-api-668bfdbd47-hk6m5    Successfully pulled image "filipjovanovski1/newsapp-api:latest" in 1.401s (1.401s including waiting). Image size: 117792201 bytes.
+32m         Normal   Created             pod/newsapp-api-668bfdbd47-hk6m5    Created container: api
+32m         Normal   Started             pod/newsapp-api-668bfdbd47-hk6m5    Started container api
+32m         Normal   ScalingReplicaSet   deployment/newsapp-api              Scaled down replica set newsapp-api-67f5566476 from 1 to 0
+32m         Normal   Killing             pod/newsapp-api-67f5566476-bc57b    Stopping container api
+32m         Normal   SuccessfulDelete    replicaset/newsapp-api-67f5566476   Deleted pod: newsapp-api-67f5566476-bc57b
+32m         Normal   SuccessfulCreate    replicaset/newsapp-api-7df5974597   Created pod: newsapp-api-7df5974597-h8dkt
+32m         Normal   Pulling             pod/newsapp-api-7df5974597-h8dkt    Pulling image "filipjovanovski1/newsapp-api:latest"
+32m         Normal   Scheduled           pod/newsapp-api-7df5974597-h8dkt    Successfully assigned newsapp/newsapp-api-7df5974597-h8dkt to docker-desktop
+32m         Normal   ScalingReplicaSet   deployment/newsapp-api              Scaled up replica set newsapp-api-7df5974597 from 0 to 1
+32m         Normal   Pulled              pod/newsapp-api-7df5974597-h8dkt    Successfully pulled image "filipjovanovski1/newsapp-api:latest" in 1.802s (1.802s including waiting). Image size: 117792201 bytes.
+32m         Normal   Created             pod/newsapp-api-7df5974597-h8dkt    Created container: api
+32m         Normal   Started             pod/newsapp-api-7df5974597-h8dkt    Started container api
+32m         Normal   SuccessfulDelete    replicaset/newsapp-api-668bfdbd47   Deleted pod: newsapp-api-668bfdbd47-hk6m5
+32m         Normal   Killing             pod/newsapp-api-668bfdbd47-hk6m5    Stopping container api
+32m         Normal   ScalingReplicaSet   deployment/newsapp-api              Scaled down replica set newsapp-api-668bfdbd47 from 1 to 0
+
+---
+CONFIGMAPS
+NAME               DATA   AGE
+kube-root-ca.crt   1      30d
+newsapp-config     5      39m
+
+---
+CONFIGMAP DETAILS
+Name:         newsapp-config
+Namespace:    newsapp
+Labels:       <none>
+Annotations:  <none>
+
+Data
+====
+ASPNETCORE_ENVIRONMENT:
+----
+Production
+
+ASPNETCORE_URLS:
+----
+http://+:8080
+
+Database__ApplyMigrationsOnStartup:
+----
+true
+
+Dev__DataRoot:
+----
+/app/Data
+
+Dev__Enabled:
+----
+false
+
+
+BinaryData
+====
+
+Events:  <none>
+
+---
+API ENV (ConfigMap keys loaded)
+Dev__Enabled=false
+ASPNETCORE_ENVIRONMENT=Production
+ASPNETCORE_URLS=http://+:8080
+Database__ApplyMigrationsOnStartup=true
+Dev__DataRoot=/app/Data
+Dev__AdminToken=***REDACTED***
+ASPNETCORE_HTTP_PORTS=8080
+
+---
+INGRESS SMOKE TEST
+curl -i -H "Host: newsapp.local" http://localhost/
+HTTP/1.1 200 OK
+Date: Tue, 10 Feb 2026 15:03:38 GMT
+Content-Type: text/html
+Content-Length: 381
+Connection: keep-alive
+Last-Modified: Tue, 10 Feb 2026 13:03:41 GMT
+ETag: "698b2cad-17d"
+Accept-Ranges: bytes
+
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>News App</title>
+  <script type="module" crossorigin src="/assets/index-DwZNudP7.js"></script>
+  <link rel="stylesheet" crossorigin href="/assets/index-7BVxs26J.css">
+</head>
+<body>
+    <div id="root"></div>
+</body>
+</html>
+
+curl -i -H "Host: newsapp.local" "http://localhost/search/preview?q=test"
+HTTP/1.1 200 OK
+Date: Tue, 10 Feb 2026 15:03:39 GMT
+Content-Type: application/json; charset=utf-8
+Transfer-Encoding: chunked
+Connection: keep-alive
+
+{"kind":4,"isAmbiguous":false,"outlineIso2":null,"isBlocking":false,"diagnostics":{"policyVersion":"ScopePolicy v2 (score-aware + tokenizer)","chosenIso2":null,"targetIds":[],"topCountries":[],"topCitiesInChosen":null,"trace":["targets.single=0"]},"canSearch":true,"originalQuery":"test","tokens":[{"raw":"test","normalized":"test","matchedEntityType":"non-geo","countries":[],"cities":[{"id":"01ffa3e9-fdf8-4a29-8a2b-d63027b5bf1e","name":"Testour","countryName":"Tunisia","countryIso2":"TN","countryIso3":"TUN","localName":null,"lat":36.5513,"lng":9.44307,"population":13397,"score":0.4444444477558136},{"id":"c79e8956-08a2-43b4-bc30-b832a4a86074","name":"Tor Tre Teste","countryName":"Italy","countryIso2":"IT","countryIso3":"ITA","localName":null,"lat":41.88233,"lng":12.58518,"population":11417,"score":0.3076923191547394},{"id":"04748665-2214-488d-aaa1-974bbb21482f","name":"La Teste-de-Buch","countryName":"France","countryIso2":"FR","countryIso3":"FRA","localName":null,"lat":44.63278,"lng":-1.14513,"population":27253,"score":0.2222222238779068},{"id":"cdcf37d6-264a-4c21-a9fc-af8dbaf9c196","name":"Feteşti","countryName":"Romania","countryIso2":"RO","countryIso3":"ROU","localName":null,"lat":44.38333,"lng":27.83333,"population":32866,"score":0.1818181872367859},{"id":"a0f58e1a-bb05-478f-8924-836fb72c54e9","name":"Piteşti","countryName":"Romania","countryIso2":"RO","countryIso3":"ROU","localName":null,"lat":44.85,"lng":24.86667,"population":167669,"score":0.1818181872367859},{"id":"fce3415c-eb62-4c42-88a0-89ed88556414","name":"Costeşti","countryName":"Romania","countryIso2":"RO","countryIso3":"ROU","localName":null,"lat":44.66667,"lng":24.88333,"population":10654,"score":0.1666666716337204},{"id":"e4d2f94e-5d97-42e5-84ac-8c390ec9af66","name":"Whitestone","countryName":"United States","countryIso2":"US","countryIso3":"USA","localName":null,"lat":40.79455,"lng":-73.81847,"population":36984,"score":0.1428571492433548},{"id":"72678c60-f88d-46ca-a57d-a4c3e85e62fc","name":"Fetești-Gară","countryName":"Romania","countryIso2":"RO","countryIso3":"ROU","localName":null,"lat":44.4196,"lng":27.82536,"population":23789,"score":0.125}]}],"countryMatches":[],"cityMatches":[],"citiesGroupedByCountry":{},"nonGeoKeywords":["test"],"targets":[]}
