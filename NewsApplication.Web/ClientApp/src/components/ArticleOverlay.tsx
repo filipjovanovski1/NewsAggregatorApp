@@ -30,8 +30,38 @@ export default function ArticleOverlay({
     onClose,
     title,
 }: Props) {
-
     const [direction, setDirection] = useState(0);
+    const [touchStart, setTouchStart] = useState<number | null>(null);
+    const [touchEnd, setTouchEnd] = useState<number | null>(null);
+
+    // Minimum swipe distance (in px)
+    const minSwipeDistance = 50;
+
+    const onTouchStart = (e: React.TouchEvent) => {
+        setTouchEnd(null);
+        setTouchStart(e.targetTouches[0].clientX);
+    };
+
+    const onTouchMove = (e: React.TouchEvent) => {
+        setTouchEnd(e.targetTouches[0].clientX);
+    };
+
+    const onTouchEnd = () => {
+        if (!touchStart || !touchEnd) return;
+
+        const distance = touchStart - touchEnd;
+        const isLeftSwipe = distance > minSwipeDistance;
+        const isRightSwipe = distance < -minSwipeDistance;
+
+        if (isLeftSwipe && canNext) {
+            setDirection(1);
+            onNext();
+        }
+        if (isRightSwipe && canPrev) {
+            setDirection(-1);
+            onPrev();
+        }
+    };
 
     useEffect(() => {
         const onKey = (e: KeyboardEvent) => {
@@ -49,7 +79,27 @@ export default function ArticleOverlay({
         return () => window.removeEventListener('keydown', onKey);
     }, [onPrev, onNext, onClose, canPrev, canNext]);
 
-    const shown = useMemo(() => items.slice(0, 6), [items]);
+    // Adjust items per page based on screen size
+    const getItemsToShow = () => {
+        if (typeof window === 'undefined') return 6;
+        const width = window.innerWidth;
+        if (width < 640) return 2; // Mobile: 1 column, 2 items
+        if (width < 1024) return 4; // Tablet: 2 columns, 4 items
+        return 6; // Desktop: 3 columns, 6 items
+    };
+
+    const [itemsToShow, setItemsToShow] = useState(getItemsToShow());
+
+    useEffect(() => {
+        const handleResize = () => {
+            setItemsToShow(getItemsToShow());
+        };
+
+        window.addEventListener('resize', handleResize);
+        return () => window.removeEventListener('resize', handleResize);
+    }, []);
+
+    const shown = useMemo(() => items.slice(0, itemsToShow), [items, itemsToShow]);
     const totalNum = total ?? items.length;
     const totalPages = Math.max(1, Math.ceil(totalNum / pageSize));
 
@@ -65,6 +115,12 @@ export default function ArticleOverlay({
         onNext();
     };
 
+    // Get icon size based on screen - scaled for 15.6"
+    const getIconSize = () => {
+        if (typeof window === 'undefined') return 16;
+        return window.innerWidth < 640 ? 14 : 16;
+    };
+
     return (
         <AnimatePresence>
             <motion.div
@@ -73,6 +129,7 @@ export default function ArticleOverlay({
                 animate={{ opacity: 1 }}
                 exit={{ opacity: 0 }}
                 transition={{ duration: 0.25 }}
+                onClick={onClose}
             >
                 <motion.div
                     className="article-overlay-surface"
@@ -80,6 +137,10 @@ export default function ArticleOverlay({
                     animate={{ opacity: 1, scale: 1, y: 0 }}
                     exit={{ opacity: 0, scale: 0.95, y: 10 }}
                     transition={{ duration: 0.35, ease: [0.25, 0.46, 0.45, 0.94] }}
+                    onClick={(e) => e.stopPropagation()}
+                    onTouchStart={onTouchStart}
+                    onTouchMove={onTouchMove}
+                    onTouchEnd={onTouchEnd}
                 >
                     <div className="article-overlay-glow glow-a" aria-hidden />
                     <div className="article-overlay-glow glow-b" aria-hidden />
@@ -87,12 +148,12 @@ export default function ArticleOverlay({
                     <div className="article-overlay-header">
                         <div className="article-overlay-title">
                             <div className="article-overlay-icon">
-                                <MapPin size={18} />
+                                <MapPin size={getIconSize()} />
                             </div>
                             <div>
                                 <h3>{title ?? 'Articles'}</h3>
                                 <p>
-                                    <Newspaper size={14} />
+                                    <Newspaper size={13} />
                                     <span>{totalNum} articles found</span>
                                 </p>
                             </div>
@@ -105,7 +166,7 @@ export default function ArticleOverlay({
                                         key={dot}
                                         className={`page-dot ${dot === page ? 'active' : ''}`}
                                         animate={{
-                                            width: dot === page ? 32 : 10,
+                                            width: dot === page ? 28 : 9,
                                             backgroundColor: dot === page ? 'rgba(89, 166, 255, 1)' : 'rgba(255,255,255,0.16)',
                                         }}
                                         transition={{ duration: 0.25 }}
@@ -123,7 +184,7 @@ export default function ArticleOverlay({
                                 whileTap={{ scale: 0.95 }}
                                 aria-label="Close overlay"
                             >
-                                <X size={18} />
+                                <X size={getIconSize()} />
                             </motion.button>
                         </div>
                     </div>
@@ -136,7 +197,7 @@ export default function ArticleOverlay({
                             whileTap={canPrev ? { scale: 0.96 } : {}}
                             aria-label="Previous page"
                         >
-                            <ChevronLeft size={20} />
+                            <ChevronLeft size={18} />
                         </motion.button>
 
                         <div className="article-overlay-grid">
@@ -169,7 +230,7 @@ export default function ArticleOverlay({
                             whileTap={canNext ? { scale: 0.96 } : {}}
                             aria-label="Next page"
                         >
-                            <ChevronRight size={20} />
+                            <ChevronRight size={18} />
                         </motion.button>
                     </div>
                     <div className="article-overlay-footer">
@@ -181,7 +242,7 @@ export default function ArticleOverlay({
                                 <motion.span
                                     key={dot}
                                     className={`page-dot ${dot === page ? 'active' : ''}`}
-                                    animate={{ width: dot === page ? 18 : 8 }}
+                                    animate={{ width: dot === page ? 16 : 7 }}
                                 />
                             ))}
                         </div>

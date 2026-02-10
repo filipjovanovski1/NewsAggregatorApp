@@ -19,34 +19,40 @@ public sealed class DevController : ControllerBase
 
     [HttpPost("import/countries")]
     public async Task<IActionResult> ImportCountries(
-        [FromServices] CountryImporter importer,
-        [FromServices] IWebHostEnvironment env,
-        CancellationToken ct)
+     [FromServices] CountryImporter importer,
+     [FromServices] IWebHostEnvironment env,
+     [FromServices] IConfiguration config,
+     CancellationToken ct)
     {
-        var path = Path.Combine(env.ContentRootPath, "Data", "List_of_countries_with_ISO3.csv");
+        var dataRoot =
+            config["Dev:DataRoot"]
+            ?? Path.GetFullPath(Path.Combine(env.ContentRootPath, "..", "NewsApplication.Repository", "Data"));
+
+        var path = Path.Combine(dataRoot, "List_of_countries_with_ISO3.csv");
+        if (!System.IO.File.Exists(path)) return NotFound(new { File = path });
+
         var (count, errs) = await importer.ImportAsync(path, ct);
-        return Ok(new { Upserted = count, Errors = errs });
+        return Ok(new { Upserted = count, Errors = errs, DataRoot = dataRoot });
     }
 
     [HttpPost("import/cities")]
     public async Task<IActionResult> ImportCities(
         [FromServices] CityImporter importer,
         [FromServices] IWebHostEnvironment env,
+        [FromServices] IConfiguration config,
         CancellationToken ct)
     {
-        try
-        {
-            var path = Path.Combine(env.ContentRootPath, "Data", "List_of_cities.csv");
-            if (!System.IO.File.Exists(path)) return NotFound(new { File = path });
+        var dataRoot =
+            config["Dev:DataRoot"]
+            ?? Path.GetFullPath(Path.Combine(env.ContentRootPath, "..", "NewsApplication.Repository", "Data"));
 
-            var (count, errs) = await importer.ImportAsync(path, ct);
-            return Ok(new { Inserted = count, Errors = errs });
-        }
-        catch (Exception ex)
-        {
-            return Problem(title: "Cities import failed", detail: ex.ToString(), statusCode: 500);
-        }
+        var path = Path.Combine(dataRoot, "List_of_cities.csv");
+        if (!System.IO.File.Exists(path)) return NotFound(new { File = path });
+
+        var (count, errs) = await importer.ImportAsync(path, ct);
+        return Ok(new { Inserted = count, Errors = errs, DataRoot = dataRoot });
     }
+
 
     [HttpPost("cache/cleanup")]
     public async Task<IActionResult> CleanupCache(

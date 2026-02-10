@@ -93,11 +93,9 @@ builder.Services.AddSwaggerGen();
 
 var app = builder.Build();
 
-if (app.Environment.IsDevelopment())
-{
-    app.UseSwagger();
-    app.UseSwaggerUI();
-}
+app.UseSwagger();
+app.UseSwaggerUI();
+
 app.UseCors("Client");
 
 var applyMigrations = builder.Configuration.GetValue<bool?>("Database:ApplyMigrationsOnStartup") ?? true;
@@ -107,6 +105,7 @@ if (applyMigrations)
 {
     using var scope = app.Services.CreateScope();
     var db = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+    
     db.Database.Migrate();
 }
 // add before app.Run();

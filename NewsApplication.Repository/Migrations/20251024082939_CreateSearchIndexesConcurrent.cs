@@ -17,7 +17,7 @@ namespace NewsApplication.Repository.Migrations
                 LANGUAGE sql
                 IMMUTABLE
                 AS $$
-                  SELECT unaccent($1);
+                  SELECT public.unaccent($1);
                 $$;
             ");
 

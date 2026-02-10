@@ -1,0 +1,5 @@
+﻿/search/*   https://newsapp-api-filip-dqejc6bef6hfh0b6.francecentral-01.azurewebsites.net/search/:splat   200
+/scope/*    https://newsapp-api-filip-dqejc6bef6hfh0b6.francecentral-01.azurewebsites.net/scope/:splat    200
+/articles/* https://newsapp-api-filip-dqejc6bef6hfh0b6.francecentral-01.azurewebsites.net/articles/:splat 200
+
+/* /index.html 200
