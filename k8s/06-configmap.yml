@@ -1,0 +1,12 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: newsapp-config
+  namespace: newsapp
+data:
+  ASPNETCORE_URLS: "http://+:8080"
+  ASPNETCORE_ENVIRONMENT: "Production"
+
+  Dev__DataRoot: "/app/Data"
+  Dev__Enabled: "false"
+  Database__ApplyMigrationsOnStartup: "true"

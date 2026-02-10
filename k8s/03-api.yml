@@ -31,12 +31,15 @@ spec:
           image: filipjovanovski1/newsapp-api:latest
           ports:
             - containerPort: 8080
-          env:
-            - name: ASPNETCORE_URLS
-              value: "http://+:8080"
-            - name: ASPNETCORE_ENVIRONMENT
-              value: "Production"
 
+          # Non-secret configuration (from ConfigMap)
+          envFrom:
+            - configMapRef:
+                name: newsapp-config
+
+          # Secrets stay explicit because your Secret keys
+          # are not the same as the env var names your app expects
+          env:
             - name: POSTGRES_USER
               valueFrom:
                 secretKeyRef:
@@ -64,16 +67,6 @@ spec:
                 secretKeyRef:
                   name: newsapp-secrets
                   key: DEV_ADMIN_TOKEN
-
-            - name: Dev__DataRoot
-              value: "/app/Data"
-
-            # Step B (dev import endpoints)
-            - name: Dev__Enabled
-              value: "false"
-
-            - name: Database__ApplyMigrationsOnStartup
-              value: "true"
 
             # Build the connection string from the env vars above
             - name: ConnectionStrings__Default
