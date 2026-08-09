@@ -335,7 +335,7 @@ body {
 
 .article-overlay-surface {
     position: relative;
-    width: min(1000px, 92vw);
+    width: min(1400px, 92vw);
     max-height: min(88vh, 850px);
     display: flex;
     flex-direction: column;
@@ -491,6 +491,8 @@ body {
     justify-content: center;
     transition: all .15s ease;
     flex-shrink: 0;
+    position: relative;
+    z-index: 20;
 }
 
     .article-overlay-arrow:hover:not(:disabled) {
@@ -506,8 +508,9 @@ body {
 
 .article-overlay-grid {
     flex: 1;
-    overflow: hidden;
     min-width: 0;
+    position: relative;
+    overflow: visible;
 }
 
 .article-overlay-grid-inner {
@@ -535,7 +538,7 @@ body {
 /* Larger screens get more space */
 @media (min-width: 1600px) {
     .article-overlay-surface {
-        width: min(1200px, 92vw);
+        width: min(1400px, 92vw);
         max-height: min(90vh, 950px);
     }
 
@@ -751,7 +754,7 @@ body {
     }
 }
 
-@media (max-width: 374px) {
+@media (max-width: 1380px) {
     .article-overlay-surface {
         border-radius: 0;
         width: 100vw;
@@ -765,4 +768,67 @@ body {
     .modern-card-media {
         height: 90px;
     }
+}
+
+
+.article-carousel-slot-center .modern-card-media {
+    height: 275px;
+    min-height: 275px;
+}
+.modern-article-card,
+.modern-article-card:hover,
+.modern-article-card:focus,
+.modern-article-card:visited {
+    text-decoration: none;
+}
+
+.modern-card-title,
+.modern-card-description,
+.modern-card-meta {
+    text-decoration: none;
+}
+
+/* Real sliding carousel */
+
+.article-carousel-stage {
+    position: relative;
+    width: 100%;
+    height: 500px;
+    overflow: visible;
+}
+
+.article-carousel-moving-card {
+    position: absolute;
+    width: 350px;
+    left: 50%;
+    top: 50%;
+    margin-left: -175px;
+    translate: 0 -50%;
+    transform-origin: center center;
+}
+
+.article-carousel-moving-card .modern-article-card {
+    width: 100%;
+    height: 430px;
+    min-height: 0;
+}
+
+.article-carousel-moving-card.is-active .modern-article-card {
+
+    border: 2px solid rgba(74, 163, 255, 0.55);
+
+    box-shadow:
+        0 0 0 1px rgba(74, 163, 255, 0.12),
+        0 18px 50px rgba(0, 0, 0, 0.3),
+        0 0 28px rgba(74, 163, 255, 0.08);
+}
+
+.article-carousel-moving-card:not(.is-active) {
+    filter: brightness(0.8);
+}
+
+.article-carousel-moving-card .modern-card-media {
+    height: 230px;
+    min-height: 230px;
+    flex-shrink: 0;
 }
