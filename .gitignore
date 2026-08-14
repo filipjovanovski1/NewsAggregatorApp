@@ -408,3 +408,4 @@ Thumbs.db
 
 
 k8s/01-secrets.local.yml
+.idea/
