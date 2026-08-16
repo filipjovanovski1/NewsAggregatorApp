@@ -8,6 +8,11 @@ export type ArticleDto = {
 
     snippet?: string;
     sourceName?: string;
+    translatedTitle?: string;
+    summary?: string;
+    summaryLanguage?: string;
+    summaryStatus?: 'pending' | 'ready' | 'failed';
+
     imageUrl?: string;
     publishedUtc?: string;
 };

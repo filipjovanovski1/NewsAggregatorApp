@@ -2,6 +2,7 @@
 using NewsApplication.Domain.Helpers;
 using NewsApplication.Repository.Db.Interfaces;
 using NewsApplication.Service.Interfaces.Ingestion;
+using NewsApplication.Web.Summarization;
 
 namespace NewsApplication.Web.Controllers;
 
@@ -11,18 +12,20 @@ public sealed class ArticlesController : ControllerBase
 {
     // IMPORTANT: Each provider page = max 10 articles (fixed by your upstream).
     private const int ProviderPageSize = 10;
-    private const int UiPageSize = 6; // your overlay shows 6 at a time
+    private const int StreamBatchSize = 6;
 
     /// <summary>
-    /// Returns a 6-article slice for the given scope and UI page, and on a *new scope*
-    /// preloads provider pages 1 AND 2 immediately on the server.
+    /// Returns one transport batch for the continuous article stream. The client appends
+    /// each batch instead of replacing the currently visible carousel articles.
     /// </summary>
     [HttpPost("search")]
     public async Task<IActionResult> Search(
         [FromQuery] string scopeKey,
         [FromQuery] int uiPage, // 1-based from the UI overlay
+        [FromQuery] string? summaryLanguage,
         [FromServices] IArticleRepository repo,
         [FromServices] IArticleIngestionService ingest,
+        [FromServices] IArticleSummaryCoordinator summaries,
         CancellationToken ct)
     {
         //MODIFIED
@@ -31,6 +34,15 @@ public sealed class ArticlesController : ControllerBase
             Console.WriteLine($"SB flow (articles/search): {flow}");
         //MODIFIED
         if (uiPage < 1) uiPage = 1;
+
+        if (!SummaryLanguage.TryNormalize(summaryLanguage ?? "mk", out var language))
+        {
+            return BadRequest(new
+            {
+                error = "Unsupported summary language.",
+                supportedLanguages = SummaryLanguage.Codes
+            });
+        }
 
         // 0) Detect "brand new scope" → preload provider pages 1 and 2 (each 10 items).
         //    If page 1 is fresh, GetOrFetchPageAsync returns cache without hitting the provider.
@@ -42,10 +54,10 @@ public sealed class ArticlesController : ControllerBase
             await ingest.GetOrFetchPageAsync(scopeKey, page: 2, pageSize: ProviderPageSize, ct);  // warm #2 now
         }
 
-        // 1) Make sure we have enough distinct items for the requested UI window [offset, offset+UiPageSize)
+        // 1) Make sure we have enough distinct items for the requested stream batch.
         //    If not, keep fetching *additional* provider pages until we cover it or the provider exhausts.
-        var offset = (uiPage - 1) * UiPageSize;
-        var need = offset + UiPageSize;
+        var offset = (uiPage - 1) * StreamBatchSize;
+        var need = offset + StreamBatchSize;
         var have = await repo.CountDistinctForScopeAsync(scopeKey, ct);                            // :contentReference[oaicite:2]{index=2}
 
         while (have < need)
@@ -73,22 +85,33 @@ public sealed class ArticlesController : ControllerBase
             orderedIds.Add(f.ArticleId);
         }
         var total = orderedIds.Count;
-        var slice = orderedIds.Skip(offset).Take(UiPageSize).ToList();
+        var slice = orderedIds.Skip(offset).Take(StreamBatchSize).ToList();
         var rows = await repo.LoadArticlesByIdsAsync(slice, ct);                                  // :contentReference[oaicite:6]{index=6}
-        var items = slice.Select(id => rows.First(a => a.ArticleId == id)).Select(a => new {
-            articleId = a.ArticleId,
-            provider = a.Provider,
-            title = a.Title,
-            description = a.Description,
-            imageUrl = a.ImageUrl,
-            publisher = a.Publisher,
-            url = a.Url,
-            publishedTime = a.PublishedTime,
-            categories = a.Categories
-        });
+        var rowsById = rows.ToDictionary(a => a.ArticleId, StringComparer.Ordinal);
+        var items = slice.Select(id =>
+        {
+            var article = rowsById[id];
+            var summary = summaries.GetOrQueue(article, language);
+            return new
+            {
+                articleId = article.ArticleId,
+                provider = article.Provider,
+                title = article.Title,
+                description = article.Description,
+                imageUrl = article.ImageUrl,
+                publisher = article.Publisher,
+                url = article.Url,
+                publishedTime = article.PublishedTime,
+                categories = article.Categories,
+                translatedTitle = summary.TranslatedTitle,
+                summary = summary.Summary,
+                summaryLanguage = summary.Language,
+                summaryStatus = summary.Status
+            };
+        }).ToList();
 
         var hasNewer = uiPage > 1;
-        var hasOlder = total > (offset + UiPageSize);
+        var hasOlder = total > (offset + StreamBatchSize);
         var nextUiPage = hasOlder ? uiPage + 1 : uiPage;
 
         // 3) Hint the client which provider page to prewarm next (keep one ahead).
@@ -100,7 +123,7 @@ public sealed class ArticlesController : ControllerBase
         {
             scopeKey,
             uiPage,
-            pageSize = UiPageSize,
+            pageSize = StreamBatchSize,
             hasNewer,
             hasOlder,
             totalDistinct = total,
@@ -112,6 +135,48 @@ public sealed class ArticlesController : ControllerBase
             },
             items
         });
+    }
+
+    [HttpGet("summaries")]
+    public async Task<IActionResult> GetSummaries(
+        [FromQuery] string[] articleIds,
+        [FromQuery] string? summaryLanguage,
+        [FromServices] IArticleRepository repo,
+        [FromServices] IArticleSummaryCoordinator summaries,
+        CancellationToken ct)
+    {
+        if (!SummaryLanguage.TryNormalize(summaryLanguage ?? "mk", out var language))
+        {
+            return BadRequest(new
+            {
+                error = "Unsupported summary language.",
+                supportedLanguages = SummaryLanguage.Codes
+            });
+        }
+
+        var ids = articleIds
+            .Where(id => !string.IsNullOrWhiteSpace(id))
+            .Distinct(StringComparer.Ordinal)
+            .Take(24)
+            .ToArray();
+        if (ids.Length == 0) return Ok(new { items = Array.Empty<object>() });
+
+        var rows = await repo.LoadArticlesByIdsAsync(ids, ct);
+        var rowsById = rows.ToDictionary(a => a.ArticleId, StringComparer.Ordinal);
+        var items = ids
+            .Where(rowsById.ContainsKey)
+            .Select(id => summaries.GetOrQueue(rowsById[id], language))
+            .Select(summary => new
+            {
+                articleId = summary.ArticleId,
+                translatedTitle = summary.TranslatedTitle,
+                summary = summary.Summary,
+                summaryLanguage = summary.Language,
+                summaryStatus = summary.Status
+            })
+            .ToList();
+
+        return Ok(new { items });
     }
 
     /// <summary>

@@ -1,6 +1,8 @@
 ﻿// src/api.ts
 
 // ---------- Shared client-side DTOs you actually render ----------
+export type SummaryStatus = 'pending' | 'ready' | 'failed';
+
 export type ArticleDto = {
     id: string;
     title: string;
@@ -10,6 +12,10 @@ export type ArticleDto = {
     sourceName?: string;
     imageUrl?: string;
     publishedUtc?: string; // ISO string
+    translatedTitle?: string;
+    summary?: string;
+    summaryLanguage?: string;
+    summaryStatus?: SummaryStatus;
 };
 
 // Server-side item (what /articles/search returns per item)
@@ -23,13 +29,17 @@ export type SearchItem = {
     url: string;
     publishedTime: string;   // ISO string
     categories?: string[];
+    translatedTitle?: string;
+    summary?: string;
+    summaryLanguage: string;
+    summaryStatus: SummaryStatus;
 };
 
 // Entire /articles/search response (server)
 export type SearchResponse = {
     scopeKey: string;
-    uiPage: number;   // which UI page was requested
-    pageSize: number; // always 6
+    uiPage: number;   // transport batch requested by the continuous carousel
+    pageSize: number; // transport batch size; batches are appended in the UI
     hasNewer: boolean;
     hasOlder: boolean;
     totalDistinct: number;
@@ -38,6 +48,18 @@ export type SearchResponse = {
     items: SearchItem[];
 };
 
+
+export type ArticleSummaryItem = {
+    articleId: string;
+    translatedTitle?: string;
+    summary?: string;
+    summaryLanguage: string;
+    summaryStatus: SummaryStatus;
+};
+
+export type ArticleSummariesResponse = {
+    items: ArticleSummaryItem[];
+};
 // /scope/resolve
 export type ResolveScopeResponse = {
     scopeKey: string;
@@ -214,10 +236,28 @@ export function reverseScope(body: ReverseScopeBody): Promise<ResolveScopeRespon
     });
 }
 
-export function searchArticles(scopeKey: string, uiPage: number): Promise<SearchResponse> {
-    return getJSON<SearchResponse>(`/articles/search?scopeKey=${encodeURIComponent(scopeKey)}&uiPage=${uiPage}`, {
+export function searchArticles(
+    scopeKey: string,
+    uiPage: number,
+    summaryLanguage: string
+): Promise<SearchResponse> {
+    const query = new URLSearchParams({
+        scopeKey,
+        uiPage: String(uiPage),
+        summaryLanguage
+    });
+    return getJSON<SearchResponse>(`/articles/search?${query.toString()}`, {
         method: 'POST',
     });
+}
+
+export function fetchArticleSummaries(
+    articleIds: string[],
+    summaryLanguage: string
+): Promise<ArticleSummariesResponse> {
+    const query = new URLSearchParams({ summaryLanguage });
+    articleIds.forEach(id => query.append('articleIds', id));
+    return getJSON<ArticleSummariesResponse>(`/articles/summaries?${query.toString()}`);
 }
 
 export function prewarm(scopeKey: string, providerPage: number): Promise<Record<string, unknown>> {
@@ -245,6 +285,10 @@ export function toArticleDto(x: SearchItem): ArticleDto {
         snippet: x.description,
         sourceName: x.publisher ?? x.provider,
         imageUrl: x.imageUrl,
-        publishedUtc: x.publishedTime
+        publishedUtc: x.publishedTime,
+        translatedTitle: x.translatedTitle,
+        summary: x.summary,
+        summaryLanguage: x.summaryLanguage,
+        summaryStatus: x.summaryStatus
     };
 }

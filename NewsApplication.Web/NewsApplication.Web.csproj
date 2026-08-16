@@ -4,7 +4,8 @@
 		<TargetFramework>net8.0</TargetFramework>
 		<Nullable>enable</Nullable>
 		<ImplicitUsings>enable</ImplicitUsings>
-	</PropertyGroup>
+	  <UserSecretsId>3eac51ca-6217-4230-b405-ff564fa8d451</UserSecretsId>
+  </PropertyGroup>
 
 	<ItemGroup>
 		<Compile Remove="ClientApp\Dockerfile" />
@@ -56,6 +57,12 @@
 		<None Include="ClientApp\Dockerfile" />
 		<None Include="ClientApp\nginx.conf" />
 		<None Include="Dockerfile" />
+	</ItemGroup>
+
+	<ItemGroup>
+		<None Update="Scripts\Ollama\*.ps1">
+			<CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+		</None>
 	</ItemGroup>
 
 </Project>

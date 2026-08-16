@@ -407,4 +407,6 @@ Thumbs.db
 .docker/**/postmaster.pid
 
 
+# Local Kubernetes credentials
+k8s/01-secrets.yml
 k8s/01-secrets.local.yml
