@@ -1,0 +1,18 @@
+export const ARTICLE_LANGUAGES = [
+    { code: 'zh-CN', label: 'Mandarin Chinese', country: 'CN' },
+    { code: 'es', label: 'Spanish', country: 'ES' },
+    { code: 'en', label: 'English', country: 'GB' },
+    { code: 'hi', label: 'Hindi', country: 'IN' },
+    { code: 'pt', label: 'Portuguese', country: 'PT' },
+    { code: 'bn', label: 'Bengali', country: 'BD' },
+    { code: 'ru', label: 'Russian', country: 'RU' },
+    { code: 'ja', label: 'Japanese', country: 'JP' },
+    { code: 'tr', label: 'Turkish', country: 'TR' },
+    { code: 'vi', label: 'Vietnamese', country: 'VN' },
+    { code: 'ar', label: 'Arabic', country: 'SA' },
+    { code: 'ko', label: 'Korean', country: 'KR' },
+    { code: 'id', label: 'Indonesian', country: 'ID' },
+    { code: 'de', label: 'German', country: 'DE' },
+    { code: 'fr', label: 'French', country: 'FR' },
+    { code: 'mk', label: 'Macedonian', country: 'MK' },
+] as const;

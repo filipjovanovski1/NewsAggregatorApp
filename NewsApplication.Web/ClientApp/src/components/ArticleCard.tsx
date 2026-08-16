@@ -1,10 +1,11 @@
 ﻿import { motion } from 'framer-motion';
-import { Calendar, ExternalLink } from 'lucide-react';
+import { Calendar, Expand } from 'lucide-react';
 import type { ArticleDto } from '../types';
 
 interface Props {
     article: ArticleDto;
     index: number;
+    onOpen: (article: ArticleDto) => void;
 }
 
 const gradientPalette: string[] = [
@@ -16,11 +17,16 @@ const gradientPalette: string[] = [
     'linear-gradient(145deg, rgba(255, 255, 255, 0.18), rgba(91, 187, 255, 0.14))',
 ];
 
-export default function ArticleCard({ article, index }: Props) {
+export default function ArticleCard({ article, index, onOpen }: Props) {
     const date = article.publishedUtc ? new Date(article.publishedUtc) : null;
     const hasImage = !!article.imageUrl?.trim();
     const gradient = gradientPalette[index % gradientPalette.length];
-    const description = article.description ?? article.snippet;
+    const title = article.summaryStatus === 'ready' && article.translatedTitle
+        ? article.translatedTitle
+        : article.title;
+    const description = article.summaryStatus === 'ready' && article.summary
+        ? article.summary
+        : article.description ?? article.snippet;
 
     // Responsive icon sizes - scaled for 15.6"
     const getIconSize = () => {
@@ -36,11 +42,11 @@ export default function ArticleCard({ article, index }: Props) {
     };
 
     return (
-        <motion.a
-            href={article.url}
-            target="_blank"
-            rel="noreferrer"
+        <motion.button
+            type="button"
             className="modern-article-card"
+            onClick={() => onOpen(article)}
+            aria-label={`Open translated article: ${title}`}
             initial={{ opacity: 0, y: 16, scale: 0.98 }}
             animate={{ opacity: 1, y: 0, scale: 1 }}
             exit={{ opacity: 0, y: -10, scale: 0.98 }}
@@ -73,12 +79,12 @@ export default function ArticleCard({ article, index }: Props) {
                     whileHover={{ scale: 1.08 }}
                     aria-hidden
                 >
-                    <ExternalLink size={getIconSize()} />
+                    <Expand size={getIconSize()} />
                 </motion.div>
             </div>
             <div className="modern-card-body">
-                <h4 className="modern-card-title" title={article.title}>
-                    {article.title}
+                <h4 className="modern-card-title" title={title}>
+                    {title}
                 </h4>
                 {description && (
                     <p className="modern-card-description">
@@ -106,6 +112,6 @@ export default function ArticleCard({ article, index }: Props) {
                 whileHover={{ scaleX: 1 }}
                 transition={{ duration: 0.3 }}
             />
-        </motion.a>
+        </motion.button>
     );
 }

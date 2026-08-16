@@ -13,6 +13,7 @@ using NewsApplication.Service.Implementations.Ingestion;
 using NewsApplication.Service.Interfaces;
 using NewsApplication.Service.Interfaces.Client;
 using NewsApplication.Service.Interfaces.Ingestion;
+using NewsApplication.Web.Summarization;
 using Npgsql;
 using System.Collections.Generic;
 using System.Linq;
@@ -75,6 +76,39 @@ builder.Services.AddScoped<IScopePolicy, ScopePolicy>();
 builder.Services.AddScoped<IScopeResolverService, ScopeResolverService>();
 
 builder.Services.Configure<NewsdataOptions>(builder.Configuration.GetSection("Newsdata"));
+builder.Services
+    .AddOptions<AiSummarizationOptions>()
+    .Bind(builder.Configuration.GetSection(AiSummarizationOptions.SectionName))
+    .Validate(options => !string.IsNullOrWhiteSpace(options.Model),
+        "AiSummarization:Model must be configured.")
+    .Validate(options => options.ContextLength > 0,
+        "AiSummarization:ContextLength must be greater than zero.")
+    .Validate(options => options.OutputTokenLimit > 0,
+        "AiSummarization:OutputTokenLimit must be greater than zero.")
+    .Validate(options => options.Temperature is >= 0,
+        "AiSummarization:Temperature must be configured and non-negative.")
+    .Validate(options => options.Seed.HasValue,
+        "AiSummarization:Seed must be configured.")
+    .Validate(options => !string.IsNullOrWhiteSpace(options.Think),
+        "AiSummarization:Think must be configured.")
+    .ValidateOnStart();
+
+builder.Services.AddSingleton<ArticleSummaryCoordinator>();
+builder.Services.AddSingleton<IArticleSummaryCoordinator>(sp =>
+    sp.GetRequiredService<ArticleSummaryCoordinator>());
+builder.Services.AddSingleton<PowerShellOllamaBodyBuilder>();
+builder.Services.AddSingleton<IOllamaBodyBuilder>(sp =>
+    sp.GetRequiredService<PowerShellOllamaBodyBuilder>());
+builder.Services.AddHttpClient<IOllamaClient, OllamaClient>((sp, http) =>
+{
+    var options = sp
+        .GetRequiredService<Microsoft.Extensions.Options.IOptions<AiSummarizationOptions>>()
+        .Value;
+    http.BaseAddress = new Uri(options.BaseUrl.TrimEnd('/') + "/");
+    http.Timeout = TimeSpan.FromSeconds(Math.Max(10, options.RequestTimeoutSeconds));
+});
+builder.Services.AddHostedService<ArticleSummaryWorker>();
+
 builder.Services.AddHttpClient<INewsdataClient, NewsdataClient>((sp, http) =>
 {
     var opt = sp.GetRequiredService<Microsoft.Extensions.Options.IOptions<NewsdataOptions>>().Value;

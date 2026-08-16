@@ -1,4 +1,4 @@
-﻿{
+{
   "$schema": "http://json.schemastore.org/launchsettings.json",
   "iisSettings": {
     "windowsAuthentication": false,
@@ -9,7 +9,6 @@
     }
   },
   "profiles": {
-
     "https": {
       "commandName": "Project",
       "dotnetRunMessages": true,
@@ -17,10 +16,7 @@
       "applicationUrl": "https://localhost:7146",
       "environmentVariables": {
         "ASPNETCORE_ENVIRONMENT": "Development",
-        "ConnectionStrings__Default": "Host=ep-icy-glade-agz1ng5m-pooler.c-2.eu-central-1.aws.neon.tech;Port=5432;Database=neondb;Username=neondb_owner;Password=npg_rONAvE6c2fVt;SSL Mode=Require;Channel Binding=Require;Search Path=public;Include Error Detail=true",
-        "Dev__Enabled": "true",
-        "Dev__AdminToken": "ISXH@#33213#JHiS",
-        "Newsdata__ApiKey": "pub_c98c676e1fe145ef9e566062051c38a1"
+        "Dev__Enabled": "true"
       }
     },
     "IIS Express": {

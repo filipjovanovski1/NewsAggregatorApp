@@ -2,6 +2,8 @@
 import SearchBar, { type GeoPickContext } from './components/SearchBar';
 import GlobeView from './components/GlobeView';
 import ArticleOverlay from './components/ArticleOverlay';
+import LanguagePicker from './components/LanguagePicker';
+import { ARTICLE_LANGUAGES } from './articleLanguages';
 import type { ArticleDto } from './types';
 import { loadTopCitiesForHover } from './hoverCities';
 import {
@@ -10,12 +12,11 @@ import {
     searchArticles,
     prewarm,
     fetchTopCities,
+    fetchArticleSummaries,
     toArticleDto,
     type ResolveScopeResponse,
     type PreviewGeoCandidate
 } from './api';
-
-const UI_PAGE_SIZE = 6;
 
 const whitespaceSplitter = /\s+/;
 
@@ -82,11 +83,19 @@ export default function App() {
     const [overlayOpen, setOverlayOpen] = useState(false);
     const [currentScopeKey, setCurrentScopeKey] = useState<string | null>(null);
     const [page, setPage] = useState(1);
+    const loadRequestRef = useRef(0);
+    const loadingMoreRef = useRef(false);
 
     const [items, setItems] = useState<ArticleDto[]>([]);
+    const [summaryLanguage, setSummaryLanguage] = useState(() => {
+        if (typeof window === 'undefined') return 'mk';
+        const stored = window.localStorage.getItem('summaryLanguage');
+        return ARTICLE_LANGUAGES.some(language => language.code === stored)
+            ? stored!
+            : 'mk';
+    });
     const [total, setTotal] = useState<number | undefined>(undefined);
-    const [canPrev, setCanPrev] = useState(false);
-    const [canNext, setCanNext] = useState(false);
+    const [hasMore, setHasMore] = useState(false);
     const [nextProviderPage, setNextProviderPage] = useState<number | null>(null);
     const [focus, setFocus] = useState<{ lat: number; lng: number; altitude?: number } | null>(null);
     const [highlightIso2, setHighlightIso2] = useState<string | null>(null);
@@ -103,16 +112,50 @@ export default function App() {
         []
     );
 
-    const load = useCallback(async (key: string, uiPage: number) => {
-        const res = await searchArticles(key, uiPage);
+    const load = useCallback(async (
+        key: string,
+        uiPage: number,
+        language = summaryLanguage
+    ) => {
+        const requestId = ++loadRequestRef.current;
+        loadingMoreRef.current = false;
+        setItems([]);
+        const res = await searchArticles(key, uiPage, language);
+        if (requestId !== loadRequestRef.current) return;
         setCurrentScopeKey(key);
         setItems(res.items.map(toArticleDto));
         setPage(res.uiPage);
-        setCanPrev(res.hasNewer);
-        setCanNext(res.hasOlder);
+        setHasMore(res.hasOlder);
         setTotal(res.totalDistinct);
         setNextProviderPage(res.prefetch?.providerPage ?? null);
-    }, []);
+    }, [summaryLanguage]);
+
+    const loadMore = useCallback(async () => {
+        if (!currentScopeKey || !hasMore || loadingMoreRef.current) return;
+
+        const requestId = loadRequestRef.current;
+        const nextPage = page + 1;
+        loadingMoreRef.current = true;
+
+        try {
+            const res = await searchArticles(currentScopeKey, nextPage, summaryLanguage);
+            if (requestId !== loadRequestRef.current) return;
+
+            const incoming = res.items.map(toArticleDto);
+            setItems(current => {
+                const knownIds = new Set(current.map(article => article.id));
+                return [...current, ...incoming.filter(article => !knownIds.has(article.id))];
+            });
+            setPage(res.uiPage);
+            setHasMore(res.hasOlder);
+            setTotal(res.totalDistinct);
+            setNextProviderPage(res.prefetch?.providerPage ?? null);
+        } catch (error) {
+            console.warn('Could not load the next article batch.', error);
+        } finally {
+            loadingMoreRef.current = false;
+        }
+    }, [currentScopeKey, hasMore, page, summaryLanguage]);
 
     const syncVisuals = useCallback((sel: ScopeSel | null) => {
         if (!sel) {
@@ -161,6 +204,72 @@ export default function App() {
             prewarm(currentScopeKey, nextProviderPage).catch(() => { });
         }
     }, [currentScopeKey, nextProviderPage]);
+
+    useEffect(() => {
+        window.localStorage.setItem('summaryLanguage', summaryLanguage);
+    }, [summaryLanguage]);
+
+    useEffect(() => {
+        if (!overlayOpen) return;
+
+        const pendingIds = items
+            .filter(article => article.summaryStatus === 'pending')
+            .map(article => article.id);
+        if (pendingIds.length === 0) return;
+
+        let cancelled = false;
+        let timeoutId: number | undefined;
+
+        const poll = async () => {
+            try {
+                const response = await fetchArticleSummaries(pendingIds, summaryLanguage);
+                if (cancelled) return;
+
+                const updates = new Map(response.items.map(item => [item.articleId, item]));
+                setItems(current => {
+                    let changed = false;
+                    const next = current.map(article => {
+                        const update = updates.get(article.id);
+                        if (!update || update.summaryLanguage !== summaryLanguage) return article;
+                        if (
+                            article.translatedTitle === update.translatedTitle &&
+                            article.summary === update.summary &&
+                            article.summaryStatus === update.summaryStatus
+                        ) return article;
+
+                        changed = true;
+                        return {
+                            ...article,
+                            translatedTitle: update.translatedTitle,
+                            summary: update.summary,
+                            summaryLanguage: update.summaryLanguage,
+                            summaryStatus: update.summaryStatus
+                        };
+                    });
+                    return changed ? next : current;
+                });
+            } catch (error) {
+                console.warn('Could not refresh article summaries.', error);
+            } finally {
+                if (!cancelled) timeoutId = window.setTimeout(poll, 1000);
+            }
+        };
+
+        void poll();
+        return () => {
+            cancelled = true;
+            if (timeoutId !== undefined) window.clearTimeout(timeoutId);
+        };
+    }, [items, overlayOpen, summaryLanguage]);
+
+    const handleSummaryLanguageChange = useCallback((language: string) => {
+        if (language === summaryLanguage) return;
+        setSummaryLanguage(language);
+        setItems([]);
+        if (overlayOpen && currentScopeKey) {
+            void load(currentScopeKey, 1, language);
+        }
+    }, [currentScopeKey, load, overlayOpen, summaryLanguage]);
 
     const buildSelection = useCallback(
         (res: ResolveScopeResponse, options?: { displayText?: string; focusHint?: FocusHint | null; overrides?: ResolveOverrides }): ScopeSel => {
@@ -275,8 +384,7 @@ export default function App() {
             setOverlayOpen(false);
             setItems([]);
             setTotal(undefined);
-            setCanPrev(false);
-            setCanNext(false);
+            setHasMore(false);
             setNextProviderPage(null);
             setCurrentScopeKey(null);
             setPage(1);
@@ -295,8 +403,7 @@ export default function App() {
             setOverlayOpen(false);
             setItems([]);
             setTotal(undefined);
-            setCanPrev(false);
-            setCanNext(false);
+            setHasMore(false);
             setNextProviderPage(null);
             setCurrentScopeKey(null);
             setPage(1);
@@ -576,18 +683,24 @@ export default function App() {
     return (
         <div className="app">
             <div className="topbar">
-                <SearchBar
-                    inline
-                    value={searchSel?.displayText ?? searchSel?.label ?? ''}
-                    onSearch={onSearch}
-                    onPickCity={handleCommitCity}
-                    onPickCountry={handleCommitCountry}
-                    onPreviewCity={previewCitySelection}
-                    onPreviewCountry={previewCountrySelection}
-                    onAmbiguous={onAmbiguous}
-                    onClearGeo={onClearGeo}
-                    onClearSearch={onClearSearch}
-                    onSearchEdit={onSearchEdit}
+                <div className="topbar-search">
+                    <SearchBar
+                        inline
+                        value={searchSel?.displayText ?? searchSel?.label ?? ''}
+                        onSearch={onSearch}
+                        onPickCity={handleCommitCity}
+                        onPickCountry={handleCommitCountry}
+                        onPreviewCity={previewCitySelection}
+                        onPreviewCountry={previewCountrySelection}
+                        onAmbiguous={onAmbiguous}
+                        onClearGeo={onClearGeo}
+                        onClearSearch={onClearSearch}
+                        onSearchEdit={onSearchEdit}
+                    />
+                </div>
+                <LanguagePicker
+                    value={summaryLanguage}
+                    onChange={handleSummaryLanguageChange}
                 />
             </div>
 
@@ -612,12 +725,8 @@ export default function App() {
                     title={activeSel.label || 'Articles'}
                     items={items}
                     total={total}
-                    page={page}
-                    pageSize={UI_PAGE_SIZE}
-                    canPrev={canPrev}
-                    canNext={canNext}
-                    onPrev={() => { if (activeSel.scopeKey && page > 1) void load(activeSel.scopeKey, page - 1); }}
-                    onNext={() => { if (activeSel.scopeKey) void load(activeSel.scopeKey, page + 1); }}
+                    hasMore={hasMore}
+                    onLoadMore={loadMore}
                     onClose={() => {
                         setOverlayOpen(false);
                     }}
