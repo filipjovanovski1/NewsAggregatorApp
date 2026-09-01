@@ -2,6 +2,7 @@
 using Microsoft.EntityFrameworkCore.ChangeTracking;
 using NewsApplication.Domain.Cache;
 using NewsApplication.Domain.DomainModels;
+using NewsApplication.Domain.DomainModels.Discovery;
 using NewsApplication.Repository.Db.Configurations.ScopeHelpers;
 // If your IEntityTypeConfiguration<T> classes live in a separate assembly/namespace,
 // add: using NewsApplication.Repository.Configurations;
@@ -19,6 +20,15 @@ namespace NewsApplication.Repository.Db
         public DbSet<Article> Articles => Set<Article>();
         public DbSet<ArticleCache> ArticleCaches => Set<ArticleCache>();
         public DbSet<ArticleCacheItem> ArticleCacheItems => Set<ArticleCacheItem>();
+
+        // Discovery pipeline. Configured by IEntityTypeConfiguration classes under
+        // Configurations/Discovery, which the ApplyConfigurationsFromAssembly call at the end
+        // of OnModelCreating picks up — nothing to add there.
+        public DbSet<DiscoveryTarget> DiscoveryTargets => Set<DiscoveryTarget>();
+        public DbSet<DiscoveryJob> DiscoveryJobs => Set<DiscoveryJob>();
+        public DbSet<NewsSource> NewsSources => Set<NewsSource>();
+        public DbSet<NewsSourceFeed> NewsSourceFeeds => Set<NewsSourceFeed>();
+        public DbSet<NewsSourceScope> NewsSourceScopes => Set<NewsSourceScope>();
 
 
         protected override void OnModelCreating(ModelBuilder modelBuilder)
@@ -48,14 +58,33 @@ namespace NewsApplication.Repository.Db
             modelBuilder.Entity<Article>(b =>
             {
                 b.ToTable("Articles");
-                b.Property(x => x.Categories)
-                 .HasColumnType("jsonb")    // Postgres jsonb
-                  .HasDefaultValueSql("'[]'::jsonb")
-                 .Metadata.SetValueComparer(categoriesComparer);
 
-                b.Property<DateTimeOffset>("InsertedAt")
-                .HasColumnType("timestamptz")
-                .HasDefaultValueSql("now()");
+                b.HasKey(a => a.Id);
+
+                b.Property(a => a.Id)
+                    .ValueGeneratedNever();
+
+                b.Property(a => a.Provider)
+                    .IsRequired();
+
+                b.Property(a => a.ProviderArticleId);
+
+                b.HasIndex(a => new
+                    {
+                        a.Provider,
+                        a.ProviderArticleId
+                    })
+                    .IsUnique()
+                    .HasFilter("\"ProviderArticleId\" IS NOT NULL");
+
+                b.Property(a => a.Categories)
+                    .HasColumnType("jsonb")
+                    .HasDefaultValueSql("'[]'::jsonb")
+                    .Metadata.SetValueComparer(categoriesComparer);
+
+                b.Property(a => a.InsertedAt)
+                    .HasColumnType("timestamptz")
+                    .HasDefaultValueSql("now()");
             });
             // ArticleCacheItem
             modelBuilder.Entity<ArticleCache>(b =>
@@ -74,18 +103,24 @@ namespace NewsApplication.Repository.Db
             modelBuilder.Entity<ArticleCacheItem>(b =>
             {
                 b.ToTable("ArticleCacheItems");
-                // Composite PK: natural idempotency for (page, article)
-                b.HasKey(x => new { x.ArticleCacheId, x.ArticleId });
 
-                b.HasOne(x => x.ArticleCache).WithMany(c => c.Items)
+                b.HasKey(x => new
+                {
+                    x.ArticleCacheId,
+                    x.ArticleId
+                });
+
+                b.HasOne(x => x.ArticleCache)
+                    .WithMany(c => c.Items)
                     .HasForeignKey(x => x.ArticleCacheId)
-                    .OnDelete(DeleteBehavior.Cascade);   // delete links when page cache expires
+                    .OnDelete(DeleteBehavior.Cascade);
 
-                b.HasOne(x => x.Article).WithMany()
+                b.HasOne(x => x.Article)
+                    .WithMany()
                     .HasForeignKey(x => x.ArticleId)
-                    .OnDelete(DeleteBehavior.Restrict);  // prevent deleting an Article still referenced
+                    .OnDelete(DeleteBehavior.Restrict);
 
-                b.HasIndex(x => x.ArticleId);            // speeds up orphan-article GC
+                b.HasIndex(x => x.ArticleId);
             });
 
 

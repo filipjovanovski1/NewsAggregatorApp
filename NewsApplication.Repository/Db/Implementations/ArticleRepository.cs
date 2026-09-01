@@ -21,58 +21,60 @@ public sealed class ArticleRepository : IArticleRepository
 
     // -----------------------------
     //  UpsertAsync(IEnumerable<Article>)
-    //  - Upsert by ArticleId (your primary key)
+    //  - Upsert by provider identity while retaining the backend-generated Id
     //  - Update mutable columns on conflict
     // -----------------------------
-    public async Task UpsertAsync(IEnumerable<Article> articles, CancellationToken ct = default)
+    public async Task<IReadOnlyList<Article>> UpsertAsync(
+        IEnumerable<Article> articles,
+        CancellationToken ct = default)
     {
-        var rows = articles?.ToList() ?? new List<Article>();
-        if (rows.Count == 0) return;
+        var incoming = articles.ToList();
+        if (incoming.Count == 0)
+            return [];
 
-        // We'll do one batched INSERT ... ON CONFLICT (ArticleId) DO UPDATE
-        // to keep it idempotent and efficient.
-        var sb = new StringBuilder();
-        sb.AppendLine(@"
-        INSERT INTO ""Articles""
-        (""ArticleId"", ""Provider"", ""Title"", ""Description"", ""ImageUrl"", ""Publisher"", 
-        ""Url"", ""PublishedTime"", ""Categories"")
-        VALUES");
+        var persisted = new List<Article>(incoming.Count);
 
-        var parameters = new List<NpgsqlParameter>();
-        for (int i = 0; i < rows.Count; i++)
+        foreach (var article in incoming)
         {
-            var p = rows[i];
-            if (i > 0) sb.AppendLine(",");
+            Article? existing = null;
 
-            sb.Append($"(@id{i}, @prov{i}, @title{i}, @desc{i}, @img{i}, @pubr{i}, @url{i}, @ptime{i}, @cats{i})");
-
-            parameters.Add(new NpgsqlParameter($"id{i}", p.ArticleId));
-            parameters.Add(new NpgsqlParameter($"prov{i}", p.Provider ?? "NEWSDATA")); // your note said set later
-            parameters.Add(new NpgsqlParameter($"title{i}", p.Title ?? string.Empty));
-            parameters.Add(new NpgsqlParameter($"desc{i}", (object?)p.Description ?? DBNull.Value));
-            parameters.Add(new NpgsqlParameter($"img{i}", (object?)p.ImageUrl ?? DBNull.Value));
-            parameters.Add(new NpgsqlParameter($"pubr{i}", p.Publisher ?? string.Empty));
-            parameters.Add(new NpgsqlParameter($"url{i}", p.Url ?? string.Empty));
-            parameters.Add(new NpgsqlParameter($"ptime{i}", p.PublishedTime));
-            parameters.Add(new NpgsqlParameter($"cats{i}", NpgsqlTypes.NpgsqlDbType.Jsonb)
+            if (!string.IsNullOrWhiteSpace(article.ProviderArticleId))
             {
-                Value = p.Categories ?? new List<string>()
-            });
+                existing = await _db.Articles.FirstOrDefaultAsync(
+                    a => a.Provider == article.Provider &&
+                         a.ProviderArticleId == article.ProviderArticleId,
+                    ct);
+            }
+
+            // Fallback for providers such as RSS that may not supply an ID.
+            if (existing is null && !string.IsNullOrWhiteSpace(article.Url))
+            {
+                existing = await _db.Articles.FirstOrDefaultAsync(
+                    a => a.Provider == article.Provider &&
+                         a.Url == article.Url,
+                    ct);
+            }
+
+            if (existing is null)
+            {
+                _db.Articles.Add(article);
+                persisted.Add(article);
+                continue;
+            }
+
+            existing.Title = article.Title;
+            existing.Description = article.Description;
+            existing.ImageUrl = article.ImageUrl;
+            existing.Publisher = article.Publisher;
+            existing.Url = article.Url;
+            existing.PublishedTime = article.PublishedTime;
+            existing.Categories = article.Categories;
+
+            persisted.Add(existing);
         }
 
-        sb.AppendLine(@"
-        ON CONFLICT (""ArticleId"") DO UPDATE SET
-          ""Provider""      = EXCLUDED.""Provider"",
-          ""Title""         = EXCLUDED.""Title"",
-          ""Description""   = EXCLUDED.""Description"",
-          ""ImageUrl""      = EXCLUDED.""ImageUrl"",
-          ""Publisher""     = EXCLUDED.""Publisher"",
-          ""Url""           = EXCLUDED.""Url"",
-          ""PublishedTime"" = EXCLUDED.""PublishedTime"",
-          ""Categories""    = EXCLUDED.""Categories"";");
-
-        var sql = sb.ToString();
-        await _db.Database.ExecuteSqlRawAsync(sql, parameters.ToArray(), ct);
+        await _db.SaveChangesAsync(ct);
+        return persisted;
     }
 
     // -----------------------------
@@ -94,12 +96,12 @@ public sealed class ArticleRepository : IArticleRepository
     //  - Idempotently insert ArticleCacheItem rows (ON CONFLICT DO NOTHING)
     // -----------------------------
     public async Task<ArticleCache> PutPageAsync(
-    string scopeKey,
-    int page,
-    string? nextPageToken,
-    DateTimeOffset expiresAt,
-    IReadOnlyList<(string articleId, int? position)> items,
-    CancellationToken ct = default)
+        string scopeKey,
+        int page,
+        string? nextPageToken,
+        DateTimeOffset expiresAt,
+        IReadOnlyList<(Guid articleId, int? position)> items,
+        CancellationToken ct = default)
     {
         // Always create a new versioned row
         // Overwrite the single row for (ScopeKey, Page)
@@ -166,7 +168,7 @@ public sealed class ArticleRepository : IArticleRepository
         var items = await (
             from i in _db.ArticleCacheItems
             where i.ArticleCacheId == cacheId
-            join a in _db.Articles on i.ArticleId equals a.ArticleId
+            join a in _db.Articles on i.ArticleId equals a.Id
             orderby i.Position ?? int.MaxValue, i.ArticleId
             select new { i.ArticleId, a.Title }
         ).ToListAsync(ct);
@@ -175,7 +177,7 @@ public sealed class ArticleRepository : IArticleRepository
             return false;
 
         var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-        var toRemove = new List<string>();
+        var toRemove = new List<Guid>();
 
         foreach (var item in items)
         {
@@ -199,11 +201,11 @@ public sealed class ArticleRepository : IArticleRepository
             .Distinct()
             .ToListAsync(ct);
 
-        var orphanIds = distinctRemovals.Except(stillLinked, StringComparer.Ordinal).ToArray();
+        var orphanIds = distinctRemovals.Except(stillLinked).ToArray();
         if (orphanIds.Length > 0)
         {
             await _db.Articles
-                .Where(a => orphanIds.Contains(a.ArticleId))
+                .Where(a => orphanIds.Contains(a.Id))
                 .ExecuteDeleteAsync(ct);
         }
 
@@ -247,7 +249,7 @@ public sealed class ArticleRepository : IArticleRepository
         DELETE FROM public.""Articles"" a
         WHERE NOT EXISTS (
             SELECT 1 FROM public.""ArticleCacheItems"" i
-            WHERE i.""ArticleId"" = a.""ArticleId""
+            WHERE i.""ArticleId"" = a.""Id""
         )
         AND a.""InsertedAt"" < (now() - {safetyWindow});", ct);
     }
@@ -258,7 +260,7 @@ public sealed class ArticleRepository : IArticleRepository
             from i in _db.ArticleCacheItems
             where i.ArticleCache.ScopeKey == scopeKey
                 && i.ArticleCache.ExpiresAt > DateTimeOffset.UtcNow
-            join a in _db.Articles on i.ArticleId equals a.ArticleId
+            join a in _db.Articles on i.ArticleId equals a.Id
             select a.Title
         ).ToListAsync(ct);
 
@@ -278,7 +280,7 @@ public sealed class ArticleRepository : IArticleRepository
             from i in _db.ArticleCacheItems
             where i.ArticleCache.ScopeKey == scopeKey
                 && i.ArticleCache.ExpiresAt > DateTimeOffset.UtcNow
-            join a in _db.Articles on i.ArticleId equals a.ArticleId
+            join a in _db.Articles on i.ArticleId equals a.Id
             select a.Title
         ).ToListAsync(ct);
     }
@@ -294,29 +296,29 @@ public sealed class ArticleRepository : IArticleRepository
     }
 
     // Flat feed: order by Page ASC, Position ASC, then PublishedTime DESC
-    public async Task<IReadOnlyList<(string ArticleId, string? Title, DateTime Published, int Page, int? Position)>>
+    public async Task<IReadOnlyList<(Guid ArticleId, string? Title, DateTime Published, int Page, int? Position)>>
          GetFlatFeedAsync(string scopeKey, int takeUpTo, CancellationToken ct = default)
     {
         var q =
             from i in _db.ArticleCacheItems
             where i.ArticleCache.ScopeKey == scopeKey
             && i.ArticleCache.ExpiresAt > DateTimeOffset.UtcNow
-            join a in _db.Articles on i.ArticleId equals a.ArticleId
+            join a in _db.Articles on i.ArticleId equals a.Id
             orderby i.ArticleCache.Page ascending, i.Position ascending, a.PublishedTime descending
             select new { i.ArticleId, a.Title, a.PublishedTime, i.ArticleCache.Page, i.Position };
 
 
         return await q.Take(takeUpTo)
-            .Select(x => new ValueTuple<string, string?, DateTime, int, int?>(x.ArticleId, x.Title, x.PublishedTime, x.Page, x.Position))
+            .Select(x => new ValueTuple<Guid, string?, DateTime, int, int?>(x.ArticleId, x.Title, x.PublishedTime, x.Page, x.Position))
             .ToListAsync(ct);
     }
 
     // Load full rows for a batch of ids (preserve external order on caller)
-    public async Task<List<Article>> LoadArticlesByIdsAsync(IEnumerable<string> ids, CancellationToken ct = default)
+    public async Task<List<Article>> LoadArticlesByIdsAsync(IEnumerable<Guid> ids, CancellationToken ct = default)
     {
-        var set = ids.ToHashSet(StringComparer.Ordinal);
+        var set = ids.ToHashSet();
         return await _db.Articles
-            .Where(a => set.Contains(a.ArticleId))
+            .Where(a => set.Contains(a.Id))
             .ToListAsync(ct);
     }
 

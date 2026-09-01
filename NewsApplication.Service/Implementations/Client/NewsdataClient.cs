@@ -5,6 +5,7 @@ using NewsApplication.Service.Interfaces;
 using NewsApplication.Service.Interfaces.Client;
 using System;
 using System.Collections.Generic;
+using System.Globalization;
 using System.Linq;
 using System.Net.Http;
 using System.Text.Json;
@@ -232,7 +233,7 @@ public sealed class NewsdataClient : INewsdataClient
     private static void TryAddArticleFromItem(JsonElement x, List<Article> dest)
     {
         // Field names matched to your sample exactly, with safe fallbacks.
-        var id = GetString(x, "article_id") ?? GetString(x, "id") ?? Guid.NewGuid().ToString("N");
+        var providerArticleId = GetString(x, "article_id") ?? GetString(x, "id");
         var title = GetString(x, "title") ?? string.Empty;
         var desc = GetString(x, "description") ?? GetString(x, "content");
         var imageUrl = GetString(x, "image_url") ?? GetString(x, "imageUrl");
@@ -250,8 +251,8 @@ public sealed class NewsdataClient : INewsdataClient
 
         dest.Add(new Article
         {
-            ArticleId = id,
             Provider = "NEWSDATA",
+            ProviderArticleId = providerArticleId,
             Title = title,
             Description = desc,
             ImageUrl = imageUrl,
@@ -269,8 +270,15 @@ public sealed class NewsdataClient : INewsdataClient
     {
         if (!e.TryGetProperty(name, out var v)) return null;
 
-        if (v.ValueKind == JsonValueKind.String && DateTime.TryParse(v.GetString(), out var dt))
-            return dt;
+        if (v.ValueKind == JsonValueKind.String &&
+            DateTimeOffset.TryParse(
+                v.GetString(),
+                CultureInfo.InvariantCulture,
+                DateTimeStyles.AssumeUniversal | DateTimeStyles.AdjustToUniversal,
+                out var timestamp))
+        {
+            return timestamp.UtcDateTime;
+        }
 
         if (v.ValueKind == JsonValueKind.Number && v.TryGetInt64(out var unixSec))
             return DateTimeOffset.FromUnixTimeSeconds(unixSec).UtcDateTime;

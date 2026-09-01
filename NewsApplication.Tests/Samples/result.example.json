@@ -1,0 +1,1503 @@
+{
+  "schema_version": 1,
+  "job_id": "aca2182e-d409-41df-8972-04d70c632ff9",
+  "status": "completed",
+  "location": {
+    "iso2": "MK",
+    "iso3": "MKD",
+    "country_name": "North Macedonia",
+    "city": "Skopje",
+    "city_local_name": "Скопје",
+    "city_id": "9c5b94b1-35ad-49bb-b118-8e8fc24abf80"
+  },
+  "started_at": "2026-08-21T13:49:36Z",
+  "finished_at": "2026-08-21T13:50:56Z",
+  "stats": {
+    "discovered": 38,
+    "crawl_failures": 5,
+    "classify_errors": 0,
+    "classified": {
+      "NEWS_SOURCE": 15,
+      "DISCOVERY_SOURCE": 11,
+      "REJECT": 12
+    },
+    "returned": 26
+  },
+  "warnings": [
+    "discover: reused cache (38 candidates)"
+  ],
+  "error": null,
+  "sources": [
+    {
+      "domain": "novamakedonija.com.mk",
+      "name": "Нова Македонија",
+      "url": "https://novamakedonija.com.mk/",
+      "source_facts_refreshed": true,
+      "language": "mk",
+      "classification": "NEWS_SOURCE",
+      "confidence": 0.98,
+      "categories": [
+        "ekonomija",
+        "makedonija",
+        "mislenja",
+        "multimedija",
+        "pecateno izdanie",
+        "prilozi",
+        "sport",
+        "svet",
+        "zivot",
+        "politika",
+        "skopje",
+        "republika",
+        "hronika",
+        "skopski legendi",
+        "balkan",
+        "kultura",
+        "magazin",
+        "roditeli i deca",
+        "feljton",
+        "od drug agol",
+        "recenzija",
+        "odbojka",
+        "fudbal",
+        "rakomet",
+        "kosarka",
+        "sportovi",
+        "video",
+        "galerija",
+        "grafikon",
+        "pusto turcko",
+        "prilozhi",
+        "medicinski soveti",
+        "nega i ubavina",
+        "kinonoma",
+        "kolibri",
+        "lik",
+        "izbor",
+        "globus",
+        "zivotni",
+        "avto-moto",
+        "zdrava hranа",
+        "lov i ribolov",
+        "tehno",
+        "domuvanje",
+        "raskazi ni za makedonija",
+        "kolibri+"
+      ],
+      "feeds": [
+        {
+          "url": "https://novamakedonija.com.mk/feed/",
+          "title": "Нова Македонија",
+          "entry_count": 10,
+          "latest_entry": "2026-08-21T12:25:10Z",
+          "has_full_content": true,
+          "language": "mk",
+          "external_link_ratio": 0.0,
+          "distinct_sources": 1
+        }
+      ],
+      "relevance": {
+        "score": 100.0,
+        "polling_tier": "high",
+        "search_occurrences": 4,
+        "matched_queries": [
+          "Skopje newspaper",
+          "North Macedonia вести",
+          "North Macedonia весник"
+        ]
+      },
+      "evidence": {
+        "reason": "The site has its own RSS feed with recent entries all originating on its domain, indicating original journalism.",
+        "article_like_paths": 293,
+        "has_date_patterns": true,
+        "author_count": 14
+      }
+    },
+    {
+      "domain": "skopjeinfo.mk",
+      "name": "skopjeinfo.mk",
+      "url": "https://skopjeinfo.mk/",
+      "source_facts_refreshed": true,
+      "language": "mk",
+      "classification": "NEWS_SOURCE",
+      "confidence": 0.97,
+      "categories": [
+        "biznis",
+        "denesni vesti",
+        "galerija",
+        "horoskop",
+        "opshtestvo",
+        "rss.xml",
+        "sites",
+        "skopje",
+        "skopje etc",
+        "taxonomy",
+        "vesti",
+        "zdravje",
+        "скопје",
+        "вести",
+        "политика",
+        "хроника",
+        "бизнис",
+        "на кафе со...",
+        "општество",
+        "хороскоп",
+        "живот",
+        "љубов",
+        "инспирација",
+        "здравје",
+        "кујна",
+        "галерија",
+        "видео на денот",
+        "фото на денот",
+        "спорт"
+      ],
+      "feeds": [
+        {
+          "url": "https://skopjeinfo.mk/feed",
+          "title": null,
+          "entry_count": 30,
+          "latest_entry": "2026-08-21T13:22:54Z",
+          "has_full_content": true,
+          "language": "mk",
+          "external_link_ratio": 0.0,
+          "distinct_sources": 1
+        },
+        {
+          "url": "https://skopjeinfo.mk/rss.xml",
+          "title": "skopjeinfo.mk",
+          "entry_count": 10,
+          "latest_entry": "2026-08-21T13:22:54Z",
+          "has_full_content": true,
+          "language": "mk",
+          "external_link_ratio": 0.0,
+          "distinct_sources": 1
+        }
+      ],
+      "relevance": {
+        "score": 99.89,
+        "polling_tier": "high",
+        "search_occurrences": 4,
+        "matched_queries": [
+          "Skopje news",
+          "Skopje newspaper",
+          "Skopje вести",
+          "Скопје дневник"
+        ]
+      },
+      "evidence": {
+        "reason": "Feeds show all entries originate on the domain (0% off‑domain) with a single outlet, indicating original news publishing.",
+        "article_like_paths": 235,
+        "has_date_patterns": true,
+        "author_count": 2
+      }
+    },
+    {
+      "domain": "meta.mk",
+      "name": "Meta.mk",
+      "url": "https://meta.mk/",
+      "source_facts_refreshed": true,
+      "language": "mk",
+      "classification": "NEWS_SOURCE",
+      "confidence": 0.98,
+      "categories": [
+        "ctrl – z",
+        "арт",
+        "балкан",
+        "видео",
+        "виз",
+        "гејминг",
+        "европа",
+        "економија",
+        "за нас",
+        "иновации",
+        "импресум",
+        "контакт",
+        "македонија",
+        "медиумска опсерваторија",
+        "мета факт",
+        "методологија",
+        "насловна",
+        "проверка на факти",
+        "свет",
+        "услови за користење",
+        "macedonia",
+        "media observatory",
+        "economy",
+        "world",
+        "balkans",
+        "europe",
+        "fact‑checking",
+        "meta fact",
+        "ctrl‑z",
+        "art",
+        "video",
+        "viz",
+        "gaming",
+        "innovations"
+      ],
+      "feeds": [
+        {
+          "url": "https://meta.mk/feed/",
+          "title": "Meta.mk",
+          "entry_count": 20,
+          "latest_entry": "2026-08-21T12:48:10Z",
+          "has_full_content": true,
+          "language": "mk",
+          "external_link_ratio": 0.0,
+          "distinct_sources": 1
+        }
+      ],
+      "relevance": {
+        "score": 88.02,
+        "polling_tier": "high",
+        "search_occurrences": 2,
+        "matched_queries": [
+          "North Macedonia news agency",
+          "North Macedonia online news portal"
+        ]
+      },
+      "evidence": {
+        "reason": "The site’s RSS feed has recent entries with full article text, all originating on the domain, indicating it publishes its own news content.",
+        "article_like_paths": 62,
+        "has_date_patterns": true,
+        "author_count": 0
+      }
+    },
+    {
+      "domain": "prv.mk",
+      "name": "ПРВ.мк",
+      "url": "https://prv.mk/",
+      "source_facts_refreshed": true,
+      "language": "mk",
+      "classification": "NEWS_SOURCE",
+      "confidence": 0.97,
+      "categories": [
+        "балкан",
+        "економија",
+        "култура",
+        "магазин",
+        "македонија",
+        "наука/технологија",
+        "радио",
+        "свет",
+        "скопје",
+        "спорт",
+        "сцена",
+        "црна хроника"
+      ],
+      "feeds": [
+        {
+          "url": "https://prv.mk/rss",
+          "title": "prv.MK RSS Feed",
+          "entry_count": 20,
+          "latest_entry": "2026-08-21T13:42:03Z",
+          "has_full_content": false,
+          "language": "mk",
+          "external_link_ratio": 0.0,
+          "distinct_sources": 1
+        }
+      ],
+      "relevance": {
+        "score": 87.91,
+        "polling_tier": "high",
+        "search_occurrences": 2,
+        "matched_queries": [
+          "Skopje вести"
+        ]
+      },
+      "evidence": {
+        "reason": "The RSS feed contains recent, on‑domain entries from a single outlet, indicating the site publishes its own news articles.",
+        "article_like_paths": 68,
+        "has_date_patterns": true,
+        "author_count": 0
+      }
+    },
+    {
+      "domain": "skopje1.mk",
+      "name": "Скопје1.мк",
+      "url": "https://skopje1.mk/",
+      "source_facts_refreshed": true,
+      "language": "mk",
+      "classification": "NEWS_SOURCE",
+      "confidence": 0.97,
+      "categories": [
+        "видео",
+        "категории",
+        "најнови вести",
+        "насловна",
+        "западнонилска треска",
+        "скопје",
+        "македонија",
+        "свет",
+        "спорт",
+        "коментари",
+        "магазин",
+        "студио",
+        "настани"
+      ],
+      "feeds": [
+        {
+          "url": "https://skopje1.mk/feed/rss",
+          "title": "Skopje 1 feed",
+          "entry_count": 50,
+          "latest_entry": "2026-08-21T13:42:16Z",
+          "has_full_content": true,
+          "language": "en",
+          "external_link_ratio": 0.0,
+          "distinct_sources": 1
+        }
+      ],
+      "relevance": {
+        "score": 87.91,
+        "polling_tier": "high",
+        "search_occurrences": 2,
+        "matched_queries": [
+          "Skopje вести"
+        ]
+      },
+      "evidence": {
+        "reason": "RSS feed shows recent full-text articles all originating from the site itself, indicating original publishing.",
+        "article_like_paths": 37,
+        "has_date_patterns": true,
+        "author_count": 0
+      }
+    },
+    {
+      "domain": "english.republika.mk",
+      "name": "Republika English",
+      "url": "https://english.republika.mk/",
+      "source_facts_refreshed": true,
+      "language": "en",
+      "classification": "NEWS_SOURCE",
+      "confidence": 0.98,
+      "categories": [
+        "balkans",
+        "culture",
+        "economy",
+        "latest news",
+        "macedonia",
+        "sport",
+        "world"
+      ],
+      "feeds": [
+        {
+          "url": "https://english.republika.mk/feed/",
+          "title": "Republika English",
+          "entry_count": 10,
+          "latest_entry": "2026-08-20T20:37:58Z",
+          "has_full_content": true,
+          "language": "en",
+          "external_link_ratio": 0.0,
+          "distinct_sources": 1
+        }
+      ],
+      "relevance": {
+        "score": 74.95,
+        "polling_tier": "medium",
+        "search_occurrences": 3,
+        "matched_queries": [
+          "Skopje newspaper",
+          "North Macedonia news website",
+          "North Macedonia online news portal"
+        ]
+      },
+      "evidence": {
+        "reason": "The site’s own RSS feed contains recent entries all originating on the domain, indicating it publishes original news articles.",
+        "article_like_paths": 157,
+        "has_date_patterns": true,
+        "author_count": 0
+      }
+    },
+    {
+      "domain": "north-macedonia.news-pravda.com",
+      "name": "Pravda Северна Македонија",
+      "url": "https://north-macedonia.news-pravda.com/",
+      "source_facts_refreshed": true,
+      "language": "mk",
+      "classification": "NEWS_SOURCE",
+      "confidence": 0.96,
+      "categories": [
+        "abkhazia (en)",
+        "alba (gd)",
+        "albania (en)",
+        "algeria (en)",
+        "aotearoa (mi)",
+        "armenia (en)",
+        "australia (en)",
+        "austria (en)",
+        "balkan (en)",
+        "balkan (sr)",
+        "belgique (fr)",
+        "belgium (en)",
+        "belgië (nl)",
+        "bosna i hercegovina (bs)",
+        "bosnia and herzegovina (en)",
+        "bulgaria (en)",
+        "burkina faso (en)",
+        "burkina faso (fr)",
+        "cameroon (en)",
+        "cameroun (fr)",
+        "canada (en)",
+        "canada (fr)",
+        "catalunya (ca)",
+        "central african republic (en)",
+        "chad (en)",
+        "croatia (en)",
+        "cymru (cy)",
+        "cyprus (en)",
+        "czech republic (en)",
+        "danmark (da)",
+        "главна",
+        "сите",
+        "видеа",
+        "top",
+        "северна македонија",
+        "nato",
+        "украина",
+        "русија",
+        "светот",
+        "слики",
+        "архива"
+      ],
+      "feeds": [
+        {
+          "url": "https://north-macedonia.news-pravda.com/rss.xml",
+          "title": "Pravda Северна Македонија",
+          "entry_count": 3,
+          "latest_entry": "2026-08-20T18:43:27Z",
+          "has_full_content": true,
+          "language": "mk",
+          "external_link_ratio": 0.0,
+          "distinct_sources": 1
+        }
+      ],
+      "relevance": {
+        "score": 71.46,
+        "polling_tier": "medium",
+        "search_occurrences": 2,
+        "matched_queries": [
+          "North Macedonia news website",
+          "North Macedonia вести"
+        ]
+      },
+      "evidence": {
+        "reason": "The RSS feed contains recent full-text articles that originate on the site's own domain, indicating it publishes original news content.",
+        "article_like_paths": 77,
+        "has_date_patterns": true,
+        "author_count": 0
+      }
+    },
+    {
+      "domain": "time.mk",
+      "name": "Вести",
+      "url": "https://time.mk/",
+      "source_facts_refreshed": true,
+      "language": "mk",
+      "classification": "NEWS_SOURCE",
+      "confidence": 0.74,
+      "categories": [
+        "ai",
+        "ed",
+        "javni",
+        "rss",
+        "sc",
+        "st",
+        "trezor",
+        "tv",
+        "vesti",
+        "sport",
+        "magazin",
+        "makedonija",
+        "ekonomija",
+        "balkan",
+        "svet",
+        "skopje",
+        "hronika",
+        "republika",
+        "kultura",
+        "tehnologija",
+        "scena"
+      ],
+      "feeds": [],
+      "relevance": {
+        "score": 65.8,
+        "polling_tier": "medium",
+        "search_occurrences": 1,
+        "matched_queries": [
+          "Skopje вести"
+        ]
+      },
+      "evidence": {
+        "reason": "Despite lacking a valid feed, the site has multiple article-like paths, sections typical of a news portal, and LLM analysis indicates it publishes original articles.",
+        "article_like_paths": 21,
+        "has_date_patterns": false,
+        "author_count": 0
+      }
+    },
+    {
+      "domain": "skopjenews.mk",
+      "name": "Skopje News",
+      "url": "https://skopjenews.mk/",
+      "source_facts_refreshed": true,
+      "language": "en",
+      "classification": "NEWS_SOURCE",
+      "confidence": 0.97,
+      "categories": [
+        "politics",
+        "economy",
+        "society",
+        "culture",
+        "sport",
+        "opinion",
+        "balkans"
+      ],
+      "feeds": [
+        {
+          "url": "https://skopjenews.mk/feed/",
+          "title": "Skopje News",
+          "entry_count": 10,
+          "latest_entry": "2026-04-20T16:05:06Z",
+          "has_full_content": true,
+          "language": "en",
+          "external_link_ratio": 0.0,
+          "distinct_sources": 1
+        }
+      ],
+      "relevance": {
+        "score": 65.58,
+        "polling_tier": "medium",
+        "search_occurrences": 1,
+        "matched_queries": [
+          "Skopje news"
+        ]
+      },
+      "evidence": {
+        "reason": "Feed shows recent full-text articles all originating from the site itself, indicating original journalism.",
+        "article_like_paths": 85,
+        "has_date_patterns": true,
+        "author_count": 20
+      }
+    },
+    {
+      "domain": "skopjediem.com",
+      "name": "SkopjeDiem",
+      "url": "https://skopjediem.com/",
+      "source_facts_refreshed": true,
+      "language": "en",
+      "classification": "NEWS_SOURCE",
+      "confidence": 0.97,
+      "categories": [
+        "news in english",
+        "next page",
+        "road conditions",
+        "facebook.com",
+        "instagram.com",
+        "t.me",
+        "twitter.com",
+        "youtube.com",
+        "politics",
+        "health",
+        "crime",
+        "environment",
+        "sports",
+        "interviews",
+        "government"
+      ],
+      "feeds": [
+        {
+          "url": "https://skopjediem.com/feed/",
+          "title": "SkopjeDiem",
+          "entry_count": 10,
+          "latest_entry": "2026-08-20T20:31:21Z",
+          "has_full_content": true,
+          "language": "en",
+          "external_link_ratio": 0.0,
+          "distinct_sources": 1
+        }
+      ],
+      "relevance": {
+        "score": 65.03,
+        "polling_tier": "medium",
+        "search_occurrences": 5,
+        "matched_queries": [
+          "Skopje news",
+          "Skopje newspaper",
+          "North Macedonia news website",
+          "North Macedonia online news portal",
+          "North Macedonia вести"
+        ]
+      },
+      "evidence": {
+        "reason": "The site's own RSS feed contains recent entries all originating on the domain, indicating it publishes original news articles.",
+        "article_like_paths": 438,
+        "has_date_patterns": true,
+        "author_count": 0
+      }
+    },
+    {
+      "domain": "mrt.com.mk",
+      "name": "МРТ",
+      "url": "https://mrt.com.mk/",
+      "source_facts_refreshed": true,
+      "language": "mk",
+      "classification": "NEWS_SOURCE",
+      "confidence": 0.98,
+      "categories": [
+        "вести",
+        "емисии",
+        "етичка комисија",
+        "за мрт",
+        "забава",
+        "инфо",
+        "контакт",
+        "маркетинг",
+        "почетна",
+        "програма",
+        "серии",
+        "спорт",
+        "филмови",
+        "news",
+        "entertainment",
+        "sport",
+        "culture",
+        "economy",
+        "world",
+        "program",
+        "series",
+        "movies",
+        "interview",
+        "education"
+      ],
+      "feeds": [
+        {
+          "url": "https://mrt.com.mk/rss.xml",
+          "title": "МРТ",
+          "entry_count": 10,
+          "latest_entry": "2026-08-21T13:38:00Z",
+          "has_full_content": true,
+          "language": "en",
+          "external_link_ratio": 0.0,
+          "distinct_sources": 1
+        }
+      ],
+      "relevance": {
+        "score": 62.96,
+        "polling_tier": "medium",
+        "search_occurrences": 1,
+        "matched_queries": [
+          "Скопје дневник"
+        ]
+      },
+      "evidence": {
+        "reason": "The site’s RSS feed contains recent full-text entries all originating from its own domain, indicating it publishes original news content.",
+        "article_like_paths": 0,
+        "has_date_patterns": false,
+        "author_count": 0
+      }
+    },
+    {
+      "domain": "vesti.mk",
+      "name": "VESTi.mk",
+      "url": "https://www.vesti.mk/",
+      "source_facts_refreshed": true,
+      "language": "mk",
+      "classification": "DISCOVERY_SOURCE",
+      "confidence": 0.97,
+      "categories": [
+        "tech",
+        "бизнис",
+        "забава",
+        "мкд",
+        "ново",
+        "поткаст",
+        "свет",
+        "спорт",
+        "local",
+        "world",
+        "business",
+        "entertainment",
+        "sport",
+        "podcast",
+        "latest"
+      ],
+      "feeds": [],
+      "relevance": {
+        "score": 60.68,
+        "polling_tier": "medium",
+        "search_occurrences": 2,
+        "matched_queries": [
+          "Skopje вести",
+          "North Macedonia вести"
+        ]
+      },
+      "evidence": {
+        "reason": "The site explicitly aggregates headlines and links to other outlets with no original articles, indicating it is a news aggregator rather than a primary news publisher.",
+        "article_like_paths": 0,
+        "has_date_patterns": true,
+        "author_count": 0
+      }
+    },
+    {
+      "domain": "aljazeera.com",
+      "name": "Breaking News, World News and Video from Al Jazeera",
+      "url": "https://www.aljazeera.com/",
+      "source_facts_refreshed": true,
+      "language": "en",
+      "classification": "NEWS_SOURCE",
+      "confidence": 0.99,
+      "categories": [
+        "africa",
+        "asia",
+        "asia pacific",
+        "climate crisis",
+        "donald trump",
+        "economy",
+        "europe",
+        "explained",
+        "features",
+        "human rights",
+        "in pictures",
+        "interactives",
+        "investigations",
+        "israel's ceasefire violations",
+        "latin america",
+        "middle east",
+        "news",
+        "opinion",
+        "podcasts",
+        "science & technology",
+        "skip to content feed",
+        "skip to featured content",
+        "skip to most read",
+        "sponsored content",
+        "sport",
+        "travel",
+        "trending",
+        "us & canada",
+        "us-israel war on iran",
+        "video"
+      ],
+      "feeds": [
+        {
+          "url": "https://www.aljazeera.com/xml/rss/all.xml",
+          "title": "Al Jazeera – Breaking News, World News and Video from Al Jazeera",
+          "entry_count": 25,
+          "latest_entry": "2026-08-21T13:30:36Z",
+          "has_full_content": false,
+          "language": "en",
+          "external_link_ratio": 0.0,
+          "distinct_sources": 1
+        }
+      ],
+      "relevance": {
+        "score": 57.63,
+        "polling_tier": "medium",
+        "search_occurrences": 1,
+        "matched_queries": [
+          "North Macedonia news website"
+        ]
+      },
+      "evidence": {
+        "reason": "The site publishes original articles with an on‑domain RSS feed, matching a single outlet, indicating it is a direct news publisher.",
+        "article_like_paths": 51,
+        "has_date_patterns": true,
+        "author_count": 2
+      }
+    },
+    {
+      "domain": "abnase.com",
+      "name": "ABNA-SE",
+      "url": "https://abnase.com/",
+      "source_facts_refreshed": true,
+      "language": "en",
+      "classification": "DISCOVERY_SOURCE",
+      "confidence": 0.95,
+      "categories": [
+        "aa",
+        "abna se",
+        "agerpres",
+        "amna",
+        "ata",
+        "bta",
+        "cna",
+        "contacts",
+        "fena",
+        "italy",
+        "kosova press",
+        "meetings",
+        "members",
+        "mia",
+        "mina",
+        "page",
+        "politics",
+        "economy",
+        "culture",
+        "technology",
+        "health",
+        "environment",
+        "infrastructure",
+        "tourism",
+        "science"
+      ],
+      "feeds": [],
+      "relevance": {
+        "score": 46.3,
+        "polling_tier": "low",
+        "search_occurrences": 1,
+        "matched_queries": [
+          "North Macedonia news agency"
+        ]
+      },
+      "evidence": {
+        "reason": "The site aggregates news from member Balkan agencies and has no original articles, indicating it is a discovery/aggregator platform, not a primary news source.",
+        "article_like_paths": 80,
+        "has_date_patterns": true,
+        "author_count": 1
+      }
+    },
+    {
+      "domain": "newsmedialists.com",
+      "name": "World Newspapers, News Sites, Magazines, TV Channels, Radio Stations, and Internet Providers Online Listing",
+      "url": "https://www.newsmedialists.com/",
+      "source_facts_refreshed": true,
+      "language": "en",
+      "classification": "DISCOVERY_SOURCE",
+      "confidence": 0.96,
+      "categories": [
+        "african american",
+        "agriculture",
+        "american football",
+        "animals pets",
+        "antiques collectibles",
+        "architecture",
+        "arts craft",
+        "auto cycles",
+        "baby",
+        "baseball",
+        "basketball",
+        "beading",
+        "billiards",
+        "bird",
+        "boating",
+        "bowling",
+        "boxing",
+        "boys",
+        "business finance",
+        "cats",
+        "celebrities gossip",
+        "celebrity",
+        "chess",
+        "computers electronics",
+        "craft",
+        "cricket",
+        "cycling",
+        "dogs",
+        "education",
+        "entertainment tv",
+        "newspapers",
+        "magazines",
+        "television",
+        "live_tv",
+        "radio",
+        "isp",
+        "top_lists"
+      ],
+      "feeds": [],
+      "relevance": {
+        "score": 41.5,
+        "polling_tier": "low",
+        "search_occurrences": 1,
+        "matched_queries": [
+          "list of newspapers in Skopje"
+        ]
+      },
+      "evidence": {
+        "reason": "The site is a directory that lists newspapers and media outlets without publishing original news articles.",
+        "article_like_paths": 11,
+        "has_date_patterns": true,
+        "author_count": 1
+      }
+    },
+    {
+      "domain": "apnews.com",
+      "name": "AP News",
+      "url": "https://apnews.com/",
+      "source_facts_refreshed": true,
+      "language": "en",
+      "classification": "NEWS_SOURCE",
+      "confidence": 0.99,
+      "categories": [
+        "ap definitive source blog",
+        "ap images spotlight blog",
+        "ap investigations",
+        "ap leads",
+        "ap news code of conduct",
+        "ap news values and principles",
+        "ap stylebook",
+        "ap’s role in elections",
+        "abortion",
+        "accessibility statement",
+        "advertise with us",
+        "africa",
+        "america at 250",
+        "animals",
+        "artificial intelligence",
+        "asia pacific",
+        "at home",
+        "auto racing",
+        "be well",
+        "better health",
+        "books",
+        "business",
+        "ca notice of collection",
+        "careers",
+        "celebrity interviews",
+        "china",
+        "climate",
+        "climate migration",
+        "climate questions",
+        "college football",
+        "world",
+        "iran war",
+        "russia-ukraine war",
+        "español",
+        "latin america",
+        "europe",
+        "us",
+        "immigration",
+        "weather",
+        "education",
+        "transportation",
+        "lgbtq+",
+        "notable deaths",
+        "politics",
+        "elections",
+        "white house",
+        "congress",
+        "supreme court",
+        "sports",
+        "nfl",
+        "mlb",
+        "nba",
+        "wnba",
+        "soccer",
+        "tennis",
+        "entertainment",
+        "movies",
+        "fashion",
+        "television",
+        "music",
+        "tariffs",
+        "inflation",
+        "financial markets",
+        "financial wellness",
+        "technology",
+        "science",
+        "fact check",
+        "oddities",
+        "trending",
+        "working well",
+        "eating well",
+        "photography",
+        "photo essays"
+      ],
+      "feeds": [],
+      "relevance": {
+        "score": 41.29,
+        "polling_tier": "low",
+        "search_occurrences": 1,
+        "matched_queries": [
+          "Skopje news"
+        ]
+      },
+      "evidence": {
+        "reason": "Associated Press publishes original news articles directly on its own domain, making it a primary news source.",
+        "article_like_paths": 536,
+        "has_date_patterns": true,
+        "author_count": 0
+      }
+    },
+    {
+      "domain": "balkaninsight.com",
+      "name": "Balkan Insight",
+      "url": "https://balkaninsight.com/",
+      "source_facts_refreshed": true,
+      "language": "en",
+      "classification": "NEWS_SOURCE",
+      "confidence": 0.95,
+      "categories": [
+        "albania",
+        "analysis",
+        "balkan media watch",
+        "balkan migrant route",
+        "balkan transitional justice",
+        "bosnia and herzegovina",
+        "bulgaria",
+        "bulgaria-north macedonia dispute",
+        "china in the balkans",
+        "countries",
+        "croatia",
+        "digital rights",
+        "environment",
+        "features",
+        "focus on far right",
+        "focus on gender justice",
+        "focus on ukraine",
+        "greece",
+        "in focus",
+        "interviews",
+        "investigations",
+        "kosovo",
+        "moldova",
+        "montenegro",
+        "news",
+        "north macedonia",
+        "open data and e-governance",
+        "opinions",
+        "paper trail",
+        "premium",
+        "profiles"
+      ],
+      "feeds": [],
+      "relevance": {
+        "score": 40.85,
+        "polling_tier": "low",
+        "search_occurrences": 1,
+        "matched_queries": [
+          "North Macedonia news website"
+        ]
+      },
+      "evidence": {
+        "reason": "LLM analysis indicates it publishes original news articles and is a news portal, despite lack of valid feeds.",
+        "article_like_paths": 216,
+        "has_date_patterns": true,
+        "author_count": 0
+      }
+    },
+    {
+      "domain": "newspapersonline.com",
+      "name": "Newspapers Online",
+      "url": "https://newspapersonline.com/",
+      "source_facts_refreshed": true,
+      "language": "en",
+      "classification": "DISCOVERY_SOURCE",
+      "confidence": 0.95,
+      "categories": [
+        "africa",
+        "arabic",
+        "asia",
+        "caribbean",
+        "español",
+        "europe",
+        "français",
+        "latin america",
+        "middle east",
+        "north america",
+        "pacific",
+        "português",
+        "saudi",
+        "terms & disclaimer",
+        "uk",
+        "us",
+        "العربية",
+        "most read editions",
+        "browse by region",
+        "browse all countries",
+        "countries list"
+      ],
+      "feeds": [],
+      "relevance": {
+        "score": 40.85,
+        "polling_tier": "low",
+        "search_occurrences": 1,
+        "matched_queries": [
+          "North Macedonia online news portal"
+        ]
+      },
+      "evidence": {
+        "reason": "The site is a global newspaper directory aggregating links to other news outlets and does not publish original articles.",
+        "article_like_paths": 249,
+        "has_date_patterns": true,
+        "author_count": 0
+      }
+    },
+    {
+      "domain": "newspapers.prensamundo.com",
+      "name": "newspapers.prensamundo.com",
+      "url": "https://newspapers.prensamundo.com/",
+      "source_facts_refreshed": true,
+      "language": "en",
+      "classification": "DISCOVERY_SOURCE",
+      "confidence": 0.98,
+      "categories": [
+        "continents",
+        "economynewspapers",
+        "newsp",
+        "sportsnewspapers",
+        "countries",
+        "rankings",
+        "newspapers"
+      ],
+      "feeds": [],
+      "relevance": {
+        "score": 38.45,
+        "polling_tier": "low",
+        "search_occurrences": 1,
+        "matched_queries": [
+          "list of newspapers in Skopje"
+        ]
+      },
+      "evidence": {
+        "reason": "The site lists newspapers and provides directory information without publishing original news articles, matching a discovery source.",
+        "article_like_paths": 24,
+        "has_date_patterns": true,
+        "author_count": 0
+      }
+    },
+    {
+      "domain": "ground.news",
+      "name": "Ground News",
+      "url": "https://ground.news/",
+      "source_facts_refreshed": true,
+      "language": "en",
+      "classification": "DISCOVERY_SOURCE",
+      "confidence": 0.97,
+      "categories": [
+        "blindspot",
+        "for you",
+        "local",
+        "politics",
+        "sports",
+        "economy",
+        "technology",
+        "cryptocurrency",
+        "science",
+        "world"
+      ],
+      "feeds": [],
+      "relevance": {
+        "score": 38.34,
+        "polling_tier": "low",
+        "search_occurrences": 1,
+        "matched_queries": [
+          "Skopje news"
+        ]
+      },
+      "evidence": {
+        "reason": "Ground News aggregates articles from many publishers and does not publish original reporting, matching the profile of a discovery/aggregator site.",
+        "article_like_paths": 142,
+        "has_date_patterns": true,
+        "author_count": 0
+      }
+    },
+    {
+      "domain": "findglocal.com",
+      "name": "Find Local Businesses",
+      "url": "https://www.findglocal.com/",
+      "source_facts_refreshed": true,
+      "language": "en",
+      "classification": "DISCOVERY_SOURCE",
+      "confidence": 0.96,
+      "categories": [
+        "al",
+        "countries",
+        "mk",
+        "nightlife",
+        "bars",
+        "restaurants",
+        "real_estate",
+        "beauty",
+        "sports",
+        "education",
+        "tourism",
+        "arts",
+        "religion"
+      ],
+      "feeds": [],
+      "relevance": {
+        "score": 36.06,
+        "polling_tier": "low",
+        "search_occurrences": 2,
+        "matched_queries": [
+          "list of newspapers in Skopje",
+          "Skopje дневник"
+        ]
+      },
+      "evidence": {
+        "reason": "The site is a directory listing newspapers and does not publish original news content.",
+        "article_like_paths": 45,
+        "has_date_patterns": false,
+        "author_count": 0
+      }
+    },
+    {
+      "domain": "skopje.in",
+      "name": "Guide Website for Skopje, Macedonia",
+      "url": "https://www.skopje.in/",
+      "source_facts_refreshed": true,
+      "language": "en",
+      "classification": "NEWS_SOURCE",
+      "confidence": 0.8,
+      "categories": [
+        "accomodation",
+        "around skopje",
+        "arrive",
+        "data",
+        "emergency",
+        "events",
+        "expats",
+        "language",
+        "legal guide for expats",
+        "macedonia",
+        "new places",
+        "news",
+        "nightlife",
+        "prices",
+        "rent",
+        "shopping",
+        "to do",
+        "around_skopje",
+        "accommodation",
+        "to_do",
+        "new_places",
+        "legal_guide_for_expats",
+        "faq",
+        "about"
+      ],
+      "feeds": [
+        {
+          "url": "https://www.skopje.in/blog-feed.xml",
+          "title": "Skopje.IN",
+          "entry_count": 20,
+          "latest_entry": "2026-02-06T12:29:17Z",
+          "has_full_content": false,
+          "language": null,
+          "external_link_ratio": 0.0,
+          "distinct_sources": 1
+        }
+      ],
+      "relevance": {
+        "score": 35.4,
+        "polling_tier": "low",
+        "search_occurrences": 1,
+        "matched_queries": [
+          "Skopje news"
+        ]
+      },
+      "evidence": {
+        "reason": "The site hosts its own recent headline-only feed with entries originating on-domain, and is identified as a NewsMediaOrganization, indicating it publishes original news content.",
+        "article_like_paths": 7,
+        "has_date_patterns": true,
+        "author_count": 0
+      }
+    },
+    {
+      "domain": "w3newspapers.com",
+      "name": "W3Newspapers",
+      "url": "https://www.w3newspapers.com/",
+      "source_facts_refreshed": true,
+      "language": "en",
+      "classification": "DISCOVERY_SOURCE",
+      "confidence": 0.97,
+      "categories": [
+        "africa",
+        "african american",
+        "arts",
+        "asia",
+        "business",
+        "caribbean",
+        "cars",
+        "central america",
+        "computers",
+        "cooking",
+        "education",
+        "entertainment",
+        "europe",
+        "fashion",
+        "health",
+        "history",
+        "kids",
+        "literature",
+        "magazines",
+        "men's",
+        "music",
+        "news",
+        "north america",
+        "oceania",
+        "photography",
+        "science",
+        "south america",
+        "spanish",
+        "sports",
+        "teen",
+        "search",
+        "browse by continent",
+        "browse alphabetically",
+        "country listings"
+      ],
+      "feeds": [],
+      "relevance": {
+        "score": 32.35,
+        "polling_tier": "low",
+        "search_occurrences": 3,
+        "matched_queries": [
+          "Skopje newspaper",
+          "North Macedonia online news portal",
+          "North Macedonia весник"
+        ]
+      },
+      "evidence": {
+        "reason": "The site is a directory listing other newspapers and has no original articles or own news feeds, indicating it helps discover news sources rather than publish news.",
+        "article_like_paths": 9,
+        "has_date_patterns": false,
+        "author_count": 0
+      }
+    },
+    {
+      "domain": "globalmedialist.com",
+      "name": "Global Media List",
+      "url": "https://globalmedialist.com/",
+      "source_facts_refreshed": true,
+      "language": "en",
+      "classification": "DISCOVERY_SOURCE",
+      "confidence": 0.97,
+      "categories": [
+        "africa",
+        "asia",
+        "blog",
+        "europe",
+        "north\n                        america",
+        "oceania",
+        "south\n                        america",
+        "north america",
+        "south america",
+        "top newspapers",
+        "top tv channels",
+        "top radio stations",
+        "top news agencies",
+        "top youtube channels"
+      ],
+      "feeds": [],
+      "relevance": {
+        "score": 31.26,
+        "polling_tier": "low",
+        "search_occurrences": 2,
+        "matched_queries": [
+          "North Macedonia news agency"
+        ]
+      },
+      "evidence": {
+        "reason": "The site is a directory cataloging media outlets and does not publish original news articles.",
+        "article_like_paths": 1,
+        "has_date_patterns": true,
+        "author_count": 0
+      }
+    },
+    {
+      "domain": "thepaperboy.com",
+      "name": "Paperboy",
+      "url": "https://www.thepaperboy.com/",
+      "source_facts_refreshed": true,
+      "language": "en",
+      "classification": "DISCOVERY_SOURCE",
+      "confidence": 0.93,
+      "categories": [
+        "front pages",
+        "how we got heredeep-dive context stories",
+        "journalists",
+        "on the spotinteractive event timeline",
+        "paper trail7-day historical comparisons",
+        "podcastdaily audio briefing",
+        "social pulsesocial media analytics",
+        "uk",
+        "us",
+        "world",
+        "daily insights",
+        "podcast",
+        "paper trail",
+        "on the spot",
+        "how we got here",
+        "social pulse",
+        "us newspapers",
+        "uk newspapers",
+        "world newspapers"
+      ],
+      "feeds": [],
+      "relevance": {
+        "score": 24.29,
+        "polling_tier": "low",
+        "search_occurrences": 1,
+        "matched_queries": [
+          "list of newspapers in Skopje"
+        ]
+      },
+      "evidence": {
+        "reason": "The site aggregates newspaper front pages and provides directory listings without publishing original news articles.",
+        "article_like_paths": 0,
+        "has_date_patterns": true,
+        "author_count": 0
+      }
+    },
+    {
+      "domain": "rashtranews.com",
+      "name": "World Newspapers, News Websites, and Online Magazines",
+      "url": "https://rashtranews.com/",
+      "source_facts_refreshed": true,
+      "language": "en",
+      "classification": "DISCOVERY_SOURCE",
+      "confidence": 0.97,
+      "categories": [
+        "african american",
+        "arts",
+        "assamese",
+        "business",
+        "cars",
+        "computers",
+        "cooking",
+        "education",
+        "entertainment",
+        "fashion",
+        "gujarati",
+        "health",
+        "hindi",
+        "history",
+        "indian newspapers",
+        "kannada",
+        "kids",
+        "literature",
+        "magazines by subject",
+        "malayalam",
+        "marathi",
+        "men's",
+        "music",
+        "news",
+        "oriya",
+        "photography",
+        "punjabi",
+        "science",
+        "spanish",
+        "sports",
+        "indian newspapers by language",
+        "world newspapers and news sites by country",
+        "social media links",
+        "e‑paper"
+      ],
+      "feeds": [],
+      "relevance": {
+        "score": 22.55,
+        "polling_tier": "low",
+        "search_occurrences": 1,
+        "matched_queries": [
+          "list of newspapers in Skopje"
+        ]
+      },
+      "evidence": {
+        "reason": "The site is a directory listing many newspapers and has no original articles or valid news feeds.",
+        "article_like_paths": 2,
+        "has_date_patterns": false,
+        "author_count": 0
+      }
+    }
+  ]
+}

@@ -7,4 +7,4 @@ using System.Threading.Tasks;
 namespace NewsApplication.Domain.DTOs.Scopes;
 
 public sealed record ArticleCacheItemDTO(
-string ArticleId, int? Position, ArticleDTO Article);
+Guid ArticleId, int? Position, ArticleDTO Article);

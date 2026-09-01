@@ -63,7 +63,7 @@ public sealed class ArticlesController : ControllerBase
         var flat = await repo.GetFlatFeedAsync(scopeKey, upTo, ct);                                  // :contentReference[oaicite:5]{index=5}
 
         var seenTitles = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-        var orderedIds = new List<string>();
+        var orderedIds = new List<Guid>();
         foreach (var f in flat)
         {
             var normalizedTitle = TitleNormalizer.Normalize(f.Title);
@@ -75,8 +75,8 @@ public sealed class ArticlesController : ControllerBase
         var total = orderedIds.Count;
         var slice = orderedIds.Skip(offset).Take(UiPageSize).ToList();
         var rows = await repo.LoadArticlesByIdsAsync(slice, ct);                                  // :contentReference[oaicite:6]{index=6}
-        var items = slice.Select(id => rows.First(a => a.ArticleId == id)).Select(a => new {
-            articleId = a.ArticleId,
+        var items = slice.Select(id => rows.First(a => a.Id == id)).Select(a => new {
+            articleId = a.Id,
             provider = a.Provider,
             title = a.Title,
             description = a.Description,

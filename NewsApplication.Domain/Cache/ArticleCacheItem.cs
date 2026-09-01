@@ -14,7 +14,7 @@ namespace NewsApplication.Domain.Cache
         [JsonIgnore]
         public ArticleCache ArticleCache { get; set; } = null!;
 
-        public string ArticleId { get; set; } = null!;  // FK → Article.ArticleId
+        public Guid ArticleId { get; set; }  // FK → Article.ArticleId
         public Article Article { get; set; } = null!;
 
         public int? Position { get; set; } // optional UI order

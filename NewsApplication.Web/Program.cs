@@ -5,13 +5,18 @@ using Microsoft.Extensions.Hosting;
 using NewsApplication.Domain.DTOs.Scopes;
 using NewsApplication.Repository.Db;
 using NewsApplication.Repository.Db.Implementations;
+using NewsApplication.Repository.Db.Implementations.Discovery;
 using NewsApplication.Repository.Db.Importers;
 using NewsApplication.Repository.Db.Interfaces;
+using NewsApplication.Repository.Db.Interfaces.Discovery;
 using NewsApplication.Service.Implementations;
 using NewsApplication.Service.Implementations.Client;
 using NewsApplication.Service.Implementations.Ingestion;
+using NewsApplication.Service.Implementations.Discovery;
+using NewsApplication.Service.Implementations.Discovery.Workers;
 using NewsApplication.Service.Interfaces;
 using NewsApplication.Service.Interfaces.Client;
+using NewsApplication.Service.Interfaces.Discovery;
 using NewsApplication.Service.Interfaces.Ingestion;
 using Npgsql;
 using System.Collections.Generic;
@@ -64,6 +69,9 @@ builder.Services.AddScoped<CityImporter>();
 builder.Services.AddScoped<ICityReadRepository, CityReadRepository>();
 builder.Services.AddScoped<ICountryReadRepository, CountryReadRepository>();
 builder.Services.AddScoped<IArticleRepository, ArticleRepository>();
+builder.Services.AddScoped<IDiscoveryTargetRepository, DiscoveryTargetRepository>();
+builder.Services.AddScoped<IDiscoveryJobRepository, DiscoveryJobRepository>();
+builder.Services.AddScoped<INewsSourceRepository, NewsSourceRepository>();
 
 // Application services (orchestration)
 builder.Services.AddScoped<ICityReadService, CityReadService>();
@@ -86,6 +94,28 @@ builder.Services.AddHttpClient("nominatim", http =>
     http.DefaultRequestHeaders.UserAgent.ParseAdd("NewsAggregatorApp/1.0 (+https://newsaggregatorapp.local/contact)");
 });
 builder.Services.AddScoped<IArticleIngestionService, ArticleIngestionService>();
+
+builder.Services.Configure<DiscoveryPipelineOptions>(
+    builder.Configuration.GetSection("DiscoveryPipeline"));
+builder.Services.AddHttpClient<IDiscoveryPipelineClient, DiscoveryPipelineClient>((sp, http) =>
+{
+    var opt = sp.GetRequiredService<Microsoft.Extensions.Options.IOptions<DiscoveryPipelineOptions>>().Value;
+    http.BaseAddress = new Uri(opt.BaseUrl.TrimEnd('/') + "/");
+    http.Timeout = TimeSpan.FromMinutes(3);
+});
+builder.Services.AddScoped<IDiscoveryJobService, DiscoveryJobService>();
+builder.Services.AddScoped<IDiscoveryResultImportService, DiscoveryResultImportService>();
+builder.Services.Configure<DiscoverySchedulerOptions>(
+    builder.Configuration.GetSection("DiscoveryScheduler"));
+builder.Services.AddHttpClient("rss", http =>
+{
+    http.Timeout = TimeSpan.FromSeconds(45);
+    http.DefaultRequestHeaders.UserAgent.ParseAdd("NewsAggregatorApp/1.0 RSS Poller");
+});
+builder.Services.AddHostedService<DiscoveryDispatcherWorker>();
+builder.Services.AddHostedService<StaleDiscoveryJobWorker>();
+builder.Services.AddHostedService<FeedRevalidationWorker>();
+builder.Services.AddHostedService<RssPollingWorker>();
 
 builder.Services.AddControllers(); 
 builder.Services.AddEndpointsApiExplorer();
@@ -175,3 +205,5 @@ static bool FixedTimeEquals(string a, string b)
 app.MapControllers();
 app.Run();
 
+// Exposes the top-level entry point to WebApplicationFactory integration tests.
+public partial class Program;

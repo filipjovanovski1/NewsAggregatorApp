@@ -401,6 +401,13 @@ pnpm-debug.log*
 Thumbs.db
 *.log
 
+# JetBrains IDEs (Rider, PyCharm, IntelliJ) — at repo root and in any subproject
+.idea/
+
+# Python virtualenvs
+.venv/
+__pycache__/
+
 .docker/**/data/
 .docker/**/pg_wal/
 .docker/**/pg_stat/
@@ -408,3 +415,5 @@ Thumbs.db
 
 
 k8s/01-secrets.local.yml
+
+CLAUDE.md

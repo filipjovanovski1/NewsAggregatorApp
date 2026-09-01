@@ -1,7 +1,6 @@
 ﻿using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
-using Microsoft.VisualStudio.TestPlatform.TestHost;
 using NewsApplication.Service.Interfaces;
 using NewsApplication.Service.Interfaces.Client;
 using NewsApplication.Tests.ArticleFetchTesting.Doubles;
@@ -13,7 +12,7 @@ namespace NewsApplication.Tests.ArticleFetchTesting.Infrastructure
     /// Spins up the full application in a test host for integration testing.
     /// Replaces the live INewsdataClient with a stubbed one.
     /// </summary>
-    public sealed class TestAppFactory : WebApplicationFactory<Program>
+    public sealed class TestAppFactory : WebApplicationFactory<global::Program>
     {
         protected override IHost CreateHost(IHostBuilder builder)
         {

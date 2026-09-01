@@ -21,6 +21,11 @@
     <Using Include="Xunit" />
   </ItemGroup>
 
+  <!-- Committed pipeline payloads, read at runtime by the DTO contract tests. -->
+  <ItemGroup>
+    <Content Include="Samples\**" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+
   <ItemGroup>
     <ProjectReference Include="..\NewsApplication.Domain\NewsApplication.Domain.csproj" />
     <ProjectReference Include="..\NewsApplication.Repository\NewsApplication.Repository.csproj" />

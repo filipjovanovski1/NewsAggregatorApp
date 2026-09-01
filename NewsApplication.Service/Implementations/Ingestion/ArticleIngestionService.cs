@@ -151,7 +151,7 @@ public sealed class ArticleIngestionService : IArticleIngestionService
 
         var finalNextToken = nextToken;
 
-        await _repo.UpsertAsync(uniqueArticles, ct);
+        var persistedArticles = await _repo.UpsertAsync(uniqueArticles, ct);
 
         // Build cache using the (potentially remapped) IDs from the original order
         await _repo.PutPageAsync(
@@ -159,7 +159,7 @@ public sealed class ArticleIngestionService : IArticleIngestionService
              page: page,
              nextPageToken: finalNextToken,
              expiresAt: DateTimeOffset.UtcNow.AddMinutes(10),
-             items: uniqueArticles.Select((a, i) => (a.ArticleId, (int?)i)).ToList(),
+             items: persistedArticles.Select((a, i) => (a.Id, (int?)i)).ToList(),
              ct: ct);
 
 

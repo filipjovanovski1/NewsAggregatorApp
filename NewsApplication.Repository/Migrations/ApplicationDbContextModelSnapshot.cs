@@ -4,6 +4,7 @@ using System.Collections.Generic;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
+using NewsApplication.Domain.DTOs.Discovery;
 using NewsApplication.Repository.Db;
 using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 
@@ -57,8 +58,8 @@ namespace NewsApplication.Repository.Migrations
                     b.Property<Guid>("ArticleCacheId")
                         .HasColumnType("uuid");
 
-                    b.Property<string>("ArticleId")
-                        .HasColumnType("text");
+                    b.Property<Guid>("ArticleId")
+                        .HasColumnType("uuid");
 
                     b.Property<int?>("Position")
                         .HasColumnType("integer");
@@ -72,8 +73,8 @@ namespace NewsApplication.Repository.Migrations
 
             modelBuilder.Entity("NewsApplication.Domain.DomainModels.Article", b =>
                 {
-                    b.Property<string>("ArticleId")
-                        .HasColumnType("text");
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid");
 
                     b.PrimitiveCollection<List<string>>("Categories")
                         .IsRequired()
@@ -96,6 +97,10 @@ namespace NewsApplication.Repository.Migrations
                         .IsRequired()
                         .HasColumnType("text");
 
+                    b.Property<string>("ProviderArticleId")
+                        .IsRequired()
+                        .HasColumnType("text");
+
                     b.Property<DateTime>("PublishedTime")
                         .HasColumnType("timestamp with time zone");
 
@@ -111,7 +116,11 @@ namespace NewsApplication.Repository.Migrations
                         .IsRequired()
                         .HasColumnType("text");
 
-                    b.HasKey("ArticleId");
+                    b.HasKey("Id");
+
+                    b.HasIndex("Provider", "ProviderArticleId")
+                        .IsUnique()
+                        .HasFilter("\"ProviderArticleId\" IS NOT NULL");
 
                     b.ToTable("Articles", (string)null);
                 });
@@ -181,6 +190,290 @@ namespace NewsApplication.Repository.Migrations
                         .HasFilter("\"Iso3\" IS NOT NULL");
 
                     b.ToTable("Countries");
+                });
+
+            modelBuilder.Entity("NewsApplication.Domain.DomainModels.Discovery.DiscoveryJob", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTimeOffset?>("CompletedAt")
+                        .HasColumnType("timestamptz");
+
+                    b.Property<Guid>("DiscoveryTargetId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("ErrorMessage")
+                        .HasColumnType("text");
+
+                    b.Property<string>("ErrorStage")
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.Property<string>("ErrorType")
+                        .HasMaxLength(128)
+                        .HasColumnType("character varying(128)");
+
+                    b.Property<DateTimeOffset>("StartedAt")
+                        .HasColumnType("timestamptz");
+
+                    b.Property<DiscoveryStatsDTO>("Stats")
+                        .HasColumnType("jsonb");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .HasMaxLength(16)
+                        .HasColumnType("character varying(16)");
+
+                    b.PrimitiveCollection<List<string>>("Warnings")
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("jsonb")
+                        .HasDefaultValueSql("'[]'::jsonb");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("DiscoveryTargetId");
+
+                    b.HasIndex("Status", "StartedAt");
+
+                    b.ToTable("DiscoveryJobs", (string)null);
+                });
+
+            modelBuilder.Entity("NewsApplication.Domain.DomainModels.Discovery.DiscoveryTarget", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<int>("CadenceDays")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer")
+                        .HasDefaultValue(90);
+
+                    b.Property<Guid?>("CityId")
+                        .HasColumnType("uuid");
+
+                    b.Property<int>("ConsecutiveEmptyRuns")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("ConsecutiveFailures")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("CountryIso2")
+                        .IsRequired()
+                        .HasMaxLength(2)
+                        .HasColumnType("character varying(2)");
+
+                    b.Property<bool>("IsEnabled")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("boolean")
+                        .HasDefaultValue(true);
+
+                    b.Property<DateTimeOffset?>("LastSuccessAt")
+                        .HasColumnType("timestamptz");
+
+                    b.Property<DateTimeOffset>("NextDueAt")
+                        .HasColumnType("timestamptz");
+
+                    b.Property<int>("Priority")
+                        .HasColumnType("integer");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("CityId");
+
+                    b.HasIndex("CountryIso2")
+                        .IsUnique()
+                        .HasFilter("\"CityId\" IS NULL");
+
+                    b.HasIndex("CountryIso2", "CityId")
+                        .IsUnique()
+                        .HasFilter("\"CityId\" IS NOT NULL");
+
+                    b.HasIndex("IsEnabled", "NextDueAt", "Priority");
+
+                    b.ToTable("DiscoveryTargets", (string)null);
+                });
+
+            modelBuilder.Entity("NewsApplication.Domain.DomainModels.Discovery.NewsSource", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.PrimitiveCollection<List<string>>("Categories")
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("jsonb")
+                        .HasDefaultValueSql("'[]'::jsonb");
+
+                    b.Property<string>("Classification")
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)");
+
+                    b.Property<double?>("Confidence")
+                        .HasColumnType("double precision");
+
+                    b.Property<string>("Domain")
+                        .IsRequired()
+                        .HasMaxLength(253)
+                        .HasColumnType("character varying(253)");
+
+                    b.Property<DateTimeOffset>("FirstDiscoveredAt")
+                        .HasColumnType("timestamptz");
+
+                    b.Property<bool>("IsActive")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("boolean")
+                        .HasDefaultValue(true);
+
+                    b.Property<string>("Language")
+                        .HasMaxLength(16)
+                        .HasColumnType("character varying(16)");
+
+                    b.Property<DateTimeOffset>("LastDiscoveredAt")
+                        .HasColumnType("timestamptz");
+
+                    b.Property<string>("Name")
+                        .HasColumnType("text");
+
+                    b.Property<string>("Url")
+                        .HasMaxLength(1024)
+                        .HasColumnType("character varying(1024)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("Domain")
+                        .IsUnique();
+
+                    b.HasIndex("IsActive", "Classification");
+
+                    b.ToTable("NewsSources", (string)null);
+                });
+
+            modelBuilder.Entity("NewsApplication.Domain.DomainModels.Discovery.NewsSourceFeed", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<int?>("DistinctSources")
+                        .HasColumnType("integer");
+
+                    b.Property<int?>("EntryCount")
+                        .HasColumnType("integer");
+
+                    b.Property<double?>("ExternalLinkRatio")
+                        .HasColumnType("double precision");
+
+                    b.Property<bool?>("HasFullContent")
+                        .HasColumnType("boolean");
+
+                    b.Property<bool>("IsActive")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("boolean")
+                        .HasDefaultValue(true);
+
+                    b.Property<string>("Language")
+                        .HasMaxLength(16)
+                        .HasColumnType("character varying(16)");
+
+                    b.Property<string>("LastEtag")
+                        .HasMaxLength(256)
+                        .HasColumnType("character varying(256)");
+
+                    b.Property<DateTimeOffset?>("LastPolledAt")
+                        .HasColumnType("timestamptz");
+
+                    b.Property<DateTimeOffset?>("LatestEntry")
+                        .HasColumnType("timestamptz");
+
+                    b.Property<Guid>("NewsSourceId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("Title")
+                        .HasMaxLength(512)
+                        .HasColumnType("character varying(512)");
+
+                    b.Property<string>("Url")
+                        .IsRequired()
+                        .HasMaxLength(1024)
+                        .HasColumnType("character varying(1024)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("IsActive", "LastPolledAt");
+
+                    b.HasIndex("NewsSourceId", "Url")
+                        .IsUnique();
+
+                    b.ToTable("NewsSourceFeeds", (string)null);
+                });
+
+            modelBuilder.Entity("NewsApplication.Domain.DomainModels.Discovery.NewsSourceScope", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid?>("CityId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("CountryIso2")
+                        .IsRequired()
+                        .HasMaxLength(2)
+                        .HasColumnType("character varying(2)");
+
+                    b.Property<DateTimeOffset>("DiscoveredAt")
+                        .HasColumnType("timestamptz");
+
+                    b.Property<Guid>("DiscoveryJobId")
+                        .HasColumnType("uuid");
+
+                    b.Property<bool>("IsStale")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("boolean")
+                        .HasDefaultValue(false);
+
+                    b.PrimitiveCollection<List<string>>("MatchedQueries")
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("jsonb")
+                        .HasDefaultValueSql("'[]'::jsonb");
+
+                    b.Property<Guid>("NewsSourceId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("PollingTier")
+                        .HasMaxLength(16)
+                        .HasColumnType("character varying(16)");
+
+                    b.Property<double?>("Score")
+                        .HasColumnType("double precision");
+
+                    b.Property<int?>("SearchOccurrences")
+                        .HasColumnType("integer");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("CityId");
+
+                    b.HasIndex("DiscoveryJobId");
+
+                    b.HasIndex("NewsSourceId", "CountryIso2")
+                        .IsUnique()
+                        .HasFilter("\"CityId\" IS NULL");
+
+                    b.HasIndex("CountryIso2", "CityId", "DiscoveryJobId");
+
+                    b.HasIndex("NewsSourceId", "CountryIso2", "CityId")
+                        .IsUnique()
+                        .HasFilter("\"CityId\" IS NOT NULL");
+
+                    b.HasIndex("CountryIso2", "CityId", "IsStale", "PollingTier");
+
+                    b.ToTable("NewsSourceScopes", (string)null);
                 });
 
             modelBuilder.Entity("NewsApplication.Repository.Db.Configurations.ScopeHelpers.CitySearchRow", b =>
@@ -278,9 +571,95 @@ namespace NewsApplication.Repository.Migrations
                     b.Navigation("Country");
                 });
 
+            modelBuilder.Entity("NewsApplication.Domain.DomainModels.Discovery.DiscoveryJob", b =>
+                {
+                    b.HasOne("NewsApplication.Domain.DomainModels.Discovery.DiscoveryTarget", "DiscoveryTarget")
+                        .WithMany("Jobs")
+                        .HasForeignKey("DiscoveryTargetId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("DiscoveryTarget");
+                });
+
+            modelBuilder.Entity("NewsApplication.Domain.DomainModels.Discovery.DiscoveryTarget", b =>
+                {
+                    b.HasOne("NewsApplication.Domain.DomainModels.City", "City")
+                        .WithMany()
+                        .HasForeignKey("CityId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.HasOne("NewsApplication.Domain.DomainModels.Country", "Country")
+                        .WithMany()
+                        .HasForeignKey("CountryIso2")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.Navigation("City");
+
+                    b.Navigation("Country");
+                });
+
+            modelBuilder.Entity("NewsApplication.Domain.DomainModels.Discovery.NewsSourceFeed", b =>
+                {
+                    b.HasOne("NewsApplication.Domain.DomainModels.Discovery.NewsSource", "NewsSource")
+                        .WithMany("Feeds")
+                        .HasForeignKey("NewsSourceId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("NewsSource");
+                });
+
+            modelBuilder.Entity("NewsApplication.Domain.DomainModels.Discovery.NewsSourceScope", b =>
+                {
+                    b.HasOne("NewsApplication.Domain.DomainModels.City", "City")
+                        .WithMany()
+                        .HasForeignKey("CityId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.HasOne("NewsApplication.Domain.DomainModels.Country", "Country")
+                        .WithMany()
+                        .HasForeignKey("CountryIso2")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("NewsApplication.Domain.DomainModels.Discovery.DiscoveryJob", "DiscoveryJob")
+                        .WithMany()
+                        .HasForeignKey("DiscoveryJobId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("NewsApplication.Domain.DomainModels.Discovery.NewsSource", "NewsSource")
+                        .WithMany("Scopes")
+                        .HasForeignKey("NewsSourceId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("City");
+
+                    b.Navigation("Country");
+
+                    b.Navigation("DiscoveryJob");
+
+                    b.Navigation("NewsSource");
+                });
+
             modelBuilder.Entity("NewsApplication.Domain.Cache.ArticleCache", b =>
                 {
                     b.Navigation("Items");
+                });
+
+            modelBuilder.Entity("NewsApplication.Domain.DomainModels.Discovery.DiscoveryTarget", b =>
+                {
+                    b.Navigation("Jobs");
+                });
+
+            modelBuilder.Entity("NewsApplication.Domain.DomainModels.Discovery.NewsSource", b =>
+                {
+                    b.Navigation("Feeds");
+
+                    b.Navigation("Scopes");
                 });
 #pragma warning restore 612, 618
         }

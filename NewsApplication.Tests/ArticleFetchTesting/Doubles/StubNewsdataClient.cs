@@ -23,7 +23,7 @@ namespace NewsApplication.Tests.ArticleFetchTesting.Doubles
             {
                 new Article
                 {
-                    ArticleId = "stub-1",
+                    ProviderArticleId = "stub-1",
                     Provider = ProviderName,
                     Title = "Stub Article #1",
                     Description = "This is a stub article for integration testing.",
@@ -35,7 +35,7 @@ namespace NewsApplication.Tests.ArticleFetchTesting.Doubles
                 },
                 new Article
                 {
-                    ArticleId = "stub-2",
+                    ProviderArticleId = "stub-2",
                     Provider = ProviderName,
                     Title = "Stub Article #2",
                     Description = "Another stubbed article entry.",

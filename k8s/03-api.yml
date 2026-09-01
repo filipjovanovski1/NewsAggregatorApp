@@ -17,6 +17,8 @@ metadata:
   name: newsapp-api
   namespace: newsapp
 spec:
+  # Load-bearing: the in-process schedulers have no distributed lock. Do not scale this
+  # deployment above one replica until dispatch and polling acquire one.
   replicas: 1
   selector:
     matchLabels:
@@ -67,6 +69,12 @@ spec:
                 secretKeyRef:
                   name: newsapp-secrets
                   key: DEV_ADMIN_TOKEN
+
+            - name: DiscoveryPipeline__SharedSecret
+              valueFrom:
+                secretKeyRef:
+                  name: newsapp-secrets
+                  key: DISCOVERY_PIPELINE_SHARED_SECRET
 
             # Build the connection string from the env vars above
             - name: ConnectionStrings__Default

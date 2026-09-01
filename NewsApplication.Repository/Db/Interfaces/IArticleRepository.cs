@@ -6,9 +6,11 @@ namespace NewsApplication.Repository.Db.Interfaces;
 public interface IArticleRepository
 {
     /// <summary>
-    /// Upsert by ArticleId (your ArticleId is the provider's external ID).
+    /// Upsert by provider identity and return entities with their internal IDs.
     /// </summary>
-    Task UpsertAsync(IEnumerable<Article> articles, CancellationToken ct = default);
+    Task<IReadOnlyList<Article>> UpsertAsync(
+        IEnumerable<Article> articles,
+        CancellationToken ct = default);
 
     /// <summary>
     /// Loads ArticleCache + Items (+ Articles) for (scopeKey, page).
@@ -24,7 +26,7 @@ public interface IArticleRepository
         int page,
         string? nextPageToken,
         DateTimeOffset expiresAt,
-        IReadOnlyList<(string articleId, int? position)> items,
+        IReadOnlyList<(Guid articleId, int? position)> items,
         CancellationToken ct = default);
 
     /// <summary>
@@ -45,11 +47,10 @@ public interface IArticleRepository
 
     Task<int> CountDistinctForScopeAsync(string scopeKey, CancellationToken ct = default);
     Task<List<string?>> GetTitlesForScopeAsync(string scopeKey, CancellationToken ct = default);
-    Task<IReadOnlyList<(string ArticleId, string? Title, DateTime Published, int Page, int? Position)>>
+    Task<IReadOnlyList<(Guid ArticleId, string? Title, DateTime Published, int Page, int? Position)>>
         GetFlatFeedAsync(string scopeKey, int takeUpTo, CancellationToken ct = default);
     Task<int> GetHighestCachedPageAsync(string scopeKey, CancellationToken ct = default);
-    Task<List<Article>> LoadArticlesByIdsAsync(IEnumerable<string> ids, CancellationToken ct = default);
-
+    Task<List<Article>> LoadArticlesByIdsAsync(IEnumerable<Guid> ids, CancellationToken ct = default);
     Task<bool> PruneDuplicateTitlesForCacheAsync(string scopeKey, int page, CancellationToken ct = default);
     Task<bool> HasFreshPageAsync(string scopeKey, int page, DateTimeOffset now, CancellationToken ct = default);
 

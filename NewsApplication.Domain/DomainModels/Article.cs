@@ -8,11 +8,9 @@ using System.Threading.Tasks;
 
 namespace NewsApplication.Domain.DomainModels
 {
-    public class Article 
+    public class Article : BaseEntity
     {
-        [Key]
-        
-        public required string ArticleId { get; set; }
+        public required string ProviderArticleId { get; set; }
         public string Provider { get; set; } = null!;   // no default here HAVE TO SET TO "NEWSDATA" LATER
         public string Title { get; set; } = null!;
         public string? Description { get; set; }
