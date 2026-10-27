@@ -407,6 +407,17 @@ Thumbs.db
 # Python virtualenvs
 .venv/
 __pycache__/
+.pytest_cache/
+.ruff_cache/
+*.egg-info/
+*.py[cod]
+
+# Local AI-assistant configuration
+.claude/
+
+# Frontend build output is produced by the web image
+NewsApplication.Web/ClientApp/dist/
+NewsApplication.Web/wwwroot/
 
 .docker/**/data/
 .docker/**/pg_wal/

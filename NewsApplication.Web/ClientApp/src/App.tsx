@@ -2,6 +2,7 @@
 import SearchBar, { type GeoPickContext } from './components/SearchBar';
 import GlobeView from './components/GlobeView';
 import ArticleOverlay from './components/ArticleOverlay';
+import NewsChat from './components/NewsChat';
 import type { ArticleDto } from './types';
 import { loadTopCitiesForHover } from './hoverCities';
 import {
@@ -623,6 +624,11 @@ export default function App() {
                     }}
                 />
             )}
+
+            <NewsChat
+                scopeKey={activeSel?.scopeKey}
+                scopeLabel={activeSel?.label}
+            />
         </div>
     );
 }

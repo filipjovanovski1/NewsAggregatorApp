@@ -1,0 +1,32 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: news-feed-ingestion
+  namespace: newsapp
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: news-feed-ingestion
+  template:
+    metadata:
+      labels:
+        app: news-feed-ingestion
+    spec:
+      containers:
+        - name: ingestion
+          image: filipjovanovski1/news-feed-ingestion:latest
+          env:
+            - name: BACKEND_BASE_URL
+              value: "http://newsapp-api:8080"
+            - name: BACKEND_INGESTION_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: newsapp-secrets
+                  key: FEED_INGESTION_TOKEN
+            - name: WORKER_ID
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.name
+            - name: LOG_LEVEL
+              value: "INFO"

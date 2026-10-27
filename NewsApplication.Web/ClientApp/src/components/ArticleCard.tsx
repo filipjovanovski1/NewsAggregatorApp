@@ -5,6 +5,7 @@ import type { ArticleDto } from '../types';
 interface Props {
     article: ArticleDto;
     index: number;
+    active?: boolean;
 }
 
 const gradientPalette: string[] = [
@@ -16,7 +17,7 @@ const gradientPalette: string[] = [
     'linear-gradient(145deg, rgba(255, 255, 255, 0.18), rgba(91, 187, 255, 0.14))',
 ];
 
-export default function ArticleCard({ article, index }: Props) {
+export default function ArticleCard({ article, index, active = false }: Props) {
     const date = article.publishedUtc ? new Date(article.publishedUtc) : null;
     const hasImage = !!article.imageUrl?.trim();
     const gradient = gradientPalette[index % gradientPalette.length];
@@ -40,7 +41,7 @@ export default function ArticleCard({ article, index }: Props) {
             href={article.url}
             target="_blank"
             rel="noreferrer"
-            className="modern-article-card"
+            className={`modern-article-card ${active ? 'carousel-card-active' : 'carousel-card-side'}`}
             initial={{ opacity: 0, y: 16, scale: 0.98 }}
             animate={{ opacity: 1, y: 0, scale: 1 }}
             exit={{ opacity: 0, y: -10, scale: 0.98 }}

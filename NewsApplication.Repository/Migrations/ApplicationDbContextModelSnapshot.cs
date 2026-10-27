@@ -76,14 +76,47 @@ namespace NewsApplication.Repository.Migrations
                     b.Property<Guid>("Id")
                         .HasColumnType("uuid");
 
+                    b.Property<string>("Author")
+                        .HasColumnType("text");
+
+                    b.Property<string>("CanonicalUrl")
+                        .HasMaxLength(2048)
+                        .HasColumnType("character varying(2048)");
+
+                    b.Property<string>("CanonicalUrlHash")
+                        .HasMaxLength(71)
+                        .HasColumnType("character varying(71)");
+
                     b.PrimitiveCollection<List<string>>("Categories")
                         .IsRequired()
                         .ValueGeneratedOnAdd()
                         .HasColumnType("jsonb")
                         .HasDefaultValueSql("'[]'::jsonb");
 
+                    b.Property<string>("ContentHash")
+                        .HasMaxLength(71)
+                        .HasColumnType("character varying(71)");
+
+                    b.Property<string>("ContentText")
+                        .HasColumnType("text");
+
                     b.Property<string>("Description")
                         .HasColumnType("text");
+
+                    b.Property<DateTimeOffset?>("ExtractedAt")
+                        .HasColumnType("timestamptz");
+
+                    b.Property<string>("ExtractionStatus")
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)");
+
+                    b.Property<string>("Extractor")
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.Property<string>("ExtractorVersion")
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)");
 
                     b.Property<string>("ImageUrl")
                         .HasColumnType("text");
@@ -92,6 +125,13 @@ namespace NewsApplication.Repository.Migrations
                         .ValueGeneratedOnAdd()
                         .HasColumnType("timestamptz")
                         .HasDefaultValueSql("now()");
+
+                    b.Property<string>("Language")
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)");
+
+                    b.Property<DateTime?>("ModifiedTime")
+                        .HasColumnType("timestamp with time zone");
 
                     b.Property<string>("Provider")
                         .IsRequired()
@@ -118,11 +158,64 @@ namespace NewsApplication.Repository.Migrations
 
                     b.HasKey("Id");
 
+                    b.HasIndex("CanonicalUrlHash")
+                        .IsUnique()
+                        .HasFilter("\"CanonicalUrlHash\" IS NOT NULL");
+
                     b.HasIndex("Provider", "ProviderArticleId")
                         .IsUnique()
                         .HasFilter("\"ProviderArticleId\" IS NOT NULL");
 
                     b.ToTable("Articles", (string)null);
+                });
+
+            modelBuilder.Entity("NewsApplication.Domain.DomainModels.ArticleFeedEntry", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("ArticleId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("EntryUrl")
+                        .IsRequired()
+                        .HasMaxLength(2048)
+                        .HasColumnType("character varying(2048)");
+
+                    b.Property<string>("EntryUrlHash")
+                        .IsRequired()
+                        .HasMaxLength(71)
+                        .HasColumnType("character varying(71)");
+
+                    b.Property<string>("ExternalEntryId")
+                        .IsRequired()
+                        .HasMaxLength(2048)
+                        .HasColumnType("character varying(2048)");
+
+                    b.Property<DateTimeOffset?>("FeedPublishedAt")
+                        .HasColumnType("timestamptz");
+
+                    b.Property<DateTimeOffset>("FirstSeenAt")
+                        .HasColumnType("timestamptz");
+
+                    b.Property<DateTimeOffset>("LastSeenAt")
+                        .HasColumnType("timestamptz");
+
+                    b.Property<Guid>("NewsSourceFeedId")
+                        .HasColumnType("uuid");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("ArticleId");
+
+                    b.HasIndex("NewsSourceFeedId", "EntryUrlHash")
+                        .IsUnique();
+
+                    b.HasIndex("NewsSourceFeedId", "ExternalEntryId")
+                        .IsUnique();
+
+                    b.ToTable("ArticleFeedEntries", (string)null);
                 });
 
             modelBuilder.Entity("NewsApplication.Domain.DomainModels.City", b =>
@@ -358,6 +451,9 @@ namespace NewsApplication.Repository.Migrations
                         .ValueGeneratedOnAdd()
                         .HasColumnType("uuid");
 
+                    b.Property<int>("ConsecutiveFailures")
+                        .HasColumnType("integer");
+
                     b.Property<int?>("DistinctSources")
                         .HasColumnType("integer");
 
@@ -379,18 +475,63 @@ namespace NewsApplication.Repository.Migrations
                         .HasMaxLength(16)
                         .HasColumnType("character varying(16)");
 
+                    b.Property<string>("LastCompletionKey")
+                        .HasMaxLength(256)
+                        .HasColumnType("character varying(256)");
+
+                    b.Property<Guid?>("LastCompletionLeaseId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("LastErrorMessage")
+                        .HasMaxLength(2000)
+                        .HasColumnType("character varying(2000)");
+
+                    b.Property<string>("LastErrorType")
+                        .HasMaxLength(128)
+                        .HasColumnType("character varying(128)");
+
                     b.Property<string>("LastEtag")
                         .HasMaxLength(256)
                         .HasColumnType("character varying(256)");
 
+                    b.Property<int?>("LastHttpStatus")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("LastModified")
+                        .HasMaxLength(128)
+                        .HasColumnType("character varying(128)");
+
                     b.Property<DateTimeOffset?>("LastPolledAt")
+                        .HasColumnType("timestamptz");
+
+                    b.Property<DateTimeOffset?>("LastSuccessfulPollAt")
                         .HasColumnType("timestamptz");
 
                     b.Property<DateTimeOffset?>("LatestEntry")
                         .HasColumnType("timestamptz");
 
+                    b.Property<DateTimeOffset?>("LeaseExpiresAt")
+                        .HasColumnType("timestamptz");
+
+                    b.Property<Guid?>("LeaseId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("LeaseOwner")
+                        .HasMaxLength(256)
+                        .HasColumnType("character varying(256)");
+
+                    b.Property<long>("LeaseVersion")
+                        .HasColumnType("bigint");
+
                     b.Property<Guid>("NewsSourceId")
                         .HasColumnType("uuid");
+
+                    b.Property<DateTimeOffset?>("NextPollAt")
+                        .HasColumnType("timestamptz");
+
+                    b.Property<string>("ResolvedUrl")
+                        .HasMaxLength(2048)
+                        .HasColumnType("character varying(2048)");
 
                     b.Property<string>("Title")
                         .HasMaxLength(512)
@@ -403,10 +544,17 @@ namespace NewsApplication.Repository.Migrations
 
                     b.HasKey("Id");
 
-                    b.HasIndex("IsActive", "LastPolledAt");
+                    b.HasIndex("LastCompletionLeaseId")
+                        .HasFilter("\"LastCompletionLeaseId\" IS NOT NULL");
+
+                    b.HasIndex("LeaseId")
+                        .IsUnique()
+                        .HasFilter("\"LeaseId\" IS NOT NULL");
 
                     b.HasIndex("NewsSourceId", "Url")
                         .IsUnique();
+
+                    b.HasIndex("IsActive", "NextPollAt", "LeaseExpiresAt");
 
                     b.ToTable("NewsSourceFeeds", (string)null);
                 });
@@ -560,6 +708,25 @@ namespace NewsApplication.Repository.Migrations
                     b.Navigation("ArticleCache");
                 });
 
+            modelBuilder.Entity("NewsApplication.Domain.DomainModels.ArticleFeedEntry", b =>
+                {
+                    b.HasOne("NewsApplication.Domain.DomainModels.Article", "Article")
+                        .WithMany("FeedEntries")
+                        .HasForeignKey("ArticleId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("NewsApplication.Domain.DomainModels.Discovery.NewsSourceFeed", "NewsSourceFeed")
+                        .WithMany("ArticleEntries")
+                        .HasForeignKey("NewsSourceFeedId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Article");
+
+                    b.Navigation("NewsSourceFeed");
+                });
+
             modelBuilder.Entity("NewsApplication.Domain.DomainModels.City", b =>
                 {
                     b.HasOne("NewsApplication.Domain.DomainModels.Country", "Country")
@@ -650,6 +817,11 @@ namespace NewsApplication.Repository.Migrations
                     b.Navigation("Items");
                 });
 
+            modelBuilder.Entity("NewsApplication.Domain.DomainModels.Article", b =>
+                {
+                    b.Navigation("FeedEntries");
+                });
+
             modelBuilder.Entity("NewsApplication.Domain.DomainModels.Discovery.DiscoveryTarget", b =>
                 {
                     b.Navigation("Jobs");
@@ -660,6 +832,11 @@ namespace NewsApplication.Repository.Migrations
                     b.Navigation("Feeds");
 
                     b.Navigation("Scopes");
+                });
+
+            modelBuilder.Entity("NewsApplication.Domain.DomainModels.Discovery.NewsSourceFeed", b =>
+                {
+                    b.Navigation("ArticleEntries");
                 });
 #pragma warning restore 612, 618
         }

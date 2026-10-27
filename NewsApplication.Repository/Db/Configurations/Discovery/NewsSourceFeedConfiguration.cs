@@ -17,9 +17,18 @@ public sealed class NewsSourceFeedConfiguration : IEntityTypeConfiguration<NewsS
         b.Property(x => x.Title).HasMaxLength(512);
         b.Property(x => x.Language).HasMaxLength(16);
         b.Property(x => x.LastEtag).HasMaxLength(256);
+        b.Property(x => x.LastModified).HasMaxLength(128);
+        b.Property(x => x.ResolvedUrl).HasMaxLength(2048);
+        b.Property(x => x.LeaseOwner).HasMaxLength(256);
+        b.Property(x => x.LastErrorType).HasMaxLength(128);
+        b.Property(x => x.LastErrorMessage).HasMaxLength(2000);
+        b.Property(x => x.LastCompletionKey).HasMaxLength(256);
 
         b.Property(x => x.LatestEntry).HasColumnType("timestamptz");
         b.Property(x => x.LastPolledAt).HasColumnType("timestamptz");
+        b.Property(x => x.NextPollAt).HasColumnType("timestamptz");
+        b.Property(x => x.LeaseExpiresAt).HasColumnType("timestamptz");
+        b.Property(x => x.LastSuccessfulPollAt).HasColumnType("timestamptz");
         b.Property(x => x.IsActive).HasDefaultValue(true);
 
         // What the §5.3 upsert conflicts on. Its DO UPDATE list must cover the discovery and
@@ -33,6 +42,9 @@ public sealed class NewsSourceFeedConfiguration : IEntityTypeConfiguration<NewsS
             .OnDelete(DeleteBehavior.Cascade);
 
         // The poller's due-feeds query.
-        b.HasIndex(x => new { x.IsActive, x.LastPolledAt });
+        b.HasIndex(x => new { x.IsActive, x.NextPollAt, x.LeaseExpiresAt });
+        b.HasIndex(x => x.LeaseId).IsUnique().HasFilter("\"LeaseId\" IS NOT NULL");
+        b.HasIndex(x => x.LastCompletionLeaseId)
+            .HasFilter("\"LastCompletionLeaseId\" IS NOT NULL");
     }
 }

@@ -1,0 +1,86 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: news-source-discovery
+  namespace: newsapp
+spec:
+  selector:
+    app: news-source-discovery
+  ports:
+    - name: http
+      port: 8000
+      targetPort: 8000
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: discovery-output
+  namespace: newsapp
+spec:
+  accessModes: ["ReadWriteOnce"]
+  resources:
+    requests:
+      storage: 2Gi
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: news-source-discovery
+  namespace: newsapp
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: news-source-discovery
+  template:
+    metadata:
+      labels:
+        app: news-source-discovery
+    spec:
+      securityContext:
+        fsGroup: 10001
+        fsGroupChangePolicy: OnRootMismatch
+      containers:
+        - name: discovery
+          image: filipjovanovski1/news-source-discovery:latest
+          ports:
+            - containerPort: 8000
+          env:
+            - name: PIPELINE_CALLBACK_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: newsapp-secrets
+                  key: DISCOVERY_CALLBACK_TOKEN
+            - name: OLLAMA_BASE_URL
+              valueFrom:
+                configMapKeyRef:
+                  name: newsapp-config
+                  key: OLLAMA_BASE_URL
+            - name: DISCOVERY_MODEL
+              valueFrom:
+                configMapKeyRef:
+                  name: newsapp-config
+                  key: DISCOVERY_MODEL
+          volumeMounts:
+            - name: output
+              mountPath: /app/output
+          startupProbe:
+            httpGet:
+              path: /health
+              port: 8000
+            failureThreshold: 30
+            periodSeconds: 5
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: 8000
+            periodSeconds: 10
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: 8000
+            periodSeconds: 30
+      volumes:
+        - name: output
+          persistentVolumeClaim:
+            claimName: discovery-output

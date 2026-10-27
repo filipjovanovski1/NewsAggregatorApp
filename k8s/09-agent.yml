@@ -1,0 +1,70 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: agent
+  namespace: newsapp
+spec:
+  selector:
+    app: news-agent
+  ports:
+    - name: http
+      port: 8090
+      targetPort: 8090
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: news-agent
+  namespace: newsapp
+spec:
+  # Conversations are currently stored in memory, so keep a single replica.
+  replicas: 1
+  selector:
+    matchLabels:
+      app: news-agent
+  template:
+    metadata:
+      labels:
+        app: news-agent
+    spec:
+      containers:
+        - name: agent
+          image: filipjovanovski1/news-agent:latest
+          ports:
+            - containerPort: 8090
+          env:
+            - name: NEWS_BACKEND_URL
+              value: "http://newsapp-api:8080"
+            - name: NEWS_BACKEND_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: newsapp-secrets
+                  key: NEWS_AGENT_TOKEN
+            - name: OLLAMA_HOST
+              valueFrom:
+                configMapKeyRef:
+                  name: newsapp-config
+                  key: OLLAMA_BASE_URL
+            - name: NEWS_AGENT_MODEL
+              valueFrom:
+                configMapKeyRef:
+                  name: newsapp-config
+                  key: NEWS_AGENT_MODEL
+            - name: NEWS_AGENT_REQUEST_TIMEOUT_SECONDS
+              value: "180"
+          startupProbe:
+            httpGet:
+              path: /health
+              port: 8090
+            failureThreshold: 30
+            periodSeconds: 5
+          readinessProbe:
+            httpGet:
+              path: /ready
+              port: 8090
+            periodSeconds: 10
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: 8090
+            periodSeconds: 30

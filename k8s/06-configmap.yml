@@ -16,3 +16,10 @@ data:
   DiscoveryScheduler__DispatchBatchSize: "1"
   DiscoveryScheduler__FeedBatchSize: "500"
   DiscoveryScheduler__PollBatchSize: "100"
+  FeedIngestion__ExternalWorkerEnabled: "true"
+
+  # Suitable for Docker Desktop Kubernetes. Override this address when Ollama
+  # runs elsewhere in a shared or production cluster.
+  OLLAMA_BASE_URL: "http://host.docker.internal:11434"
+  DISCOVERY_MODEL: "gpt-oss:120b-cloud"
+  NEWS_AGENT_MODEL: "gpt-oss:120b-cloud"

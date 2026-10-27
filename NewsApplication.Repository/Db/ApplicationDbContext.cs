@@ -18,6 +18,7 @@ namespace NewsApplication.Repository.Db
         public DbSet<Country> Countries => Set<Country>();
         public DbSet<City> Cities => Set<City>();
         public DbSet<Article> Articles => Set<Article>();
+        public DbSet<ArticleFeedEntry> ArticleFeedEntries => Set<ArticleFeedEntry>();
         public DbSet<ArticleCache> ArticleCaches => Set<ArticleCache>();
         public DbSet<ArticleCacheItem> ArticleCacheItems => Set<ArticleCacheItem>();
 
@@ -85,6 +86,18 @@ namespace NewsApplication.Repository.Db
                 b.Property(a => a.InsertedAt)
                     .HasColumnType("timestamptz")
                     .HasDefaultValueSql("now()");
+
+                b.Property(a => a.CanonicalUrl).HasMaxLength(2048);
+                b.Property(a => a.CanonicalUrlHash).HasMaxLength(71);
+                b.HasIndex(a => a.CanonicalUrlHash)
+                    .IsUnique()
+                    .HasFilter("\"CanonicalUrlHash\" IS NOT NULL");
+                b.Property(a => a.ContentHash).HasMaxLength(71);
+                b.Property(a => a.Language).HasMaxLength(32);
+                b.Property(a => a.ExtractionStatus).HasMaxLength(32);
+                b.Property(a => a.Extractor).HasMaxLength(64);
+                b.Property(a => a.ExtractorVersion).HasMaxLength(32);
+                b.Property(a => a.ExtractedAt).HasColumnType("timestamptz");
             });
             // ArticleCacheItem
             modelBuilder.Entity<ArticleCache>(b =>

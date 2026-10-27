@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<rss version="2.0">
+  <channel>
+    <title>Example News</title>
+    <link>https://news.example.com/</link>
+    <description>Example feed</description>
+    <item>
+      <guid>story-123</guid>
+      <title>Нова приказна од Скопје</title>
+      <link>https://news.example.com/story/123?utm_source=rss</link>
+      <description><![CDATA[<p>Краток опис на веста.</p>]]></description>
+      <author>Feed Author</author>
+      <category>Local</category>
+      <pubDate>Fri, 23 Oct 2026 10:30:00 GMT</pubDate>
+    </item>
+  </channel>
+</rss>

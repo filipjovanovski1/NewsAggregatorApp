@@ -40,14 +40,13 @@
     depends_on:
       postgres:
         condition: service_healthy
+      discovery:
+        condition: service_healthy
     environment:
       ASPNETCORE_ENVIRONMENT: "Production"
 
       # API (inside compose) must connect to postgres service on 5432
       ConnectionStrings__Default: "Host=postgres;Port=5432;Database=${POSTGRES_DB};Username=${POSTGRES_USER};Password=${POSTGRES_PASSWORD};Include Error Detail=true"
-
-      # External API key
-      Newsdata__ApiKey: "${NEWSDATA_API_KEY}"
 
       # DevController protection + CSV root
       Dev__Enabled: "${DEV_ENABLED}"
@@ -57,13 +56,93 @@
       # optional if you want migrations in container startup
       Database__ApplyMigrationsOnStartup: "true"
 
+      # Dedicated contract used by the standalone RSS/article extraction worker.
+      # Override FEED_INGESTION_TOKEN in .env outside local development.
+      FeedIngestion__Token: "${FEED_INGESTION_TOKEN:-local-feed-ingestion-dev-token}"
+      FeedIngestion__ExternalWorkerEnabled: "true"
+
+      # Authenticates the news-agent's internal article tools.
+      Agent__Token: "${NEWS_AGENT_TOKEN:-local-news-agent-dev-token}"
+
+      # Discovery jobs run in the Python service and call this API with results.
+      DiscoveryPipeline__BaseUrl: "http://discovery:8000"
+      DiscoveryPipeline__CallbackBaseUrl: "http://api:8080"
+      DiscoveryPipeline__SharedSecret: "${DISCOVERY_CALLBACK_TOKEN:-local-discovery-dev-token}"
+      DiscoveryScheduler__Enabled: "true"
+
     # Mount your large CSVs into the API container (recommended)
     volumes:
       - ../../NewsApplication.Repository/Data:/app/Data:ro
 
     # Optional: expose API to host for debugging (not required when web proxies it)
-    # ports:
-    #   - "8082:8080"
+    ports:
+      - "8082:8080"
+
+  ingestion:
+    container_name: news-feed-ingestion
+    image: filipjovanovski1/news-feed-ingestion:latest
+    build:
+      context: ../../news-feed-ingestion
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    depends_on:
+      - api
+    environment:
+      # Service-to-service traffic stays on the Compose network.
+      BACKEND_BASE_URL: "http://api:8080"
+      BACKEND_INGESTION_TOKEN: "${FEED_INGESTION_TOKEN:-local-feed-ingestion-dev-token}"
+      WORKER_ID: "news-feed-ingestion-compose"
+      LOG_LEVEL: "INFO"
+
+  discovery:
+    container_name: news-source-discovery
+    image: filipjovanovski1/news-source-discovery:latest
+    build:
+      context: ../../news-source-discovery
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    environment:
+      PIPELINE_CALLBACK_TOKEN: "${DISCOVERY_CALLBACK_TOKEN:-local-discovery-dev-token}"
+      OLLAMA_BASE_URL: "${OLLAMA_BASE_URL:-http://host.docker.internal:11434}"
+      DISCOVERY_MODEL: "${DISCOVERY_MODEL:-gpt-oss:120b-cloud}"
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    volumes:
+      - discovery-output:/app/output
+    ports:
+      - "8000:8000"
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health', timeout=3)"]
+      interval: 10s
+      timeout: 5s
+      retries: 30
+      start_period: 20s
+
+  agent:
+    container_name: news-agent
+    image: filipjovanovski1/news-agent:latest
+    build:
+      context: ../../news-agent
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    depends_on:
+      - api
+    environment:
+      NEWS_BACKEND_URL: "http://api:8080"
+      NEWS_BACKEND_TOKEN: "${NEWS_AGENT_TOKEN:-local-news-agent-dev-token}"
+      OLLAMA_HOST: "${OLLAMA_BASE_URL:-http://host.docker.internal:11434}"
+      NEWS_AGENT_MODEL: "${NEWS_AGENT_MODEL:-gpt-oss:120b-cloud}"
+      NEWS_AGENT_REQUEST_TIMEOUT_SECONDS: "180"
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    ports:
+      - "8090:8090"
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8090/health', timeout=3)"]
+      interval: 15s
+      timeout: 5s
+      retries: 10
+      start_period: 30s
 
   web:
     container_name: newsapp-web
@@ -74,8 +153,10 @@
       dockerfile: Dockerfile
     depends_on:
       - api
+      - agent
     ports:
       - "8080:80"
 
 volumes:
   pgadmin-data:
+  discovery-output:

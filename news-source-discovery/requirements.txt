@@ -1,0 +1,11 @@
+ddgs
+crawl4ai
+beautifulsoup4
+requests
+httpx
+feedparser
+fastapi
+uvicorn
+
+#dev
+pytest

@@ -58,4 +58,34 @@ public class NewsSourceFeed : BaseEntity
     /// <summary>Poller state, same rule as LastPolledAt. Sent as If-None-Match so an unchanged
     /// feed costs a 304 instead of a full body.</summary>
     public string? LastEtag { get; set; }
+
+    public string? LastModified { get; set; }
+
+    public string? ResolvedUrl { get; set; }
+
+    public DateTimeOffset? NextPollAt { get; set; }
+
+    public Guid? LeaseId { get; set; }
+
+    public string? LeaseOwner { get; set; }
+
+    public long LeaseVersion { get; set; }
+
+    public DateTimeOffset? LeaseExpiresAt { get; set; }
+
+    public int ConsecutiveFailures { get; set; }
+
+    public int? LastHttpStatus { get; set; }
+
+    public string? LastErrorType { get; set; }
+
+    public string? LastErrorMessage { get; set; }
+
+    public DateTimeOffset? LastSuccessfulPollAt { get; set; }
+
+    public Guid? LastCompletionLeaseId { get; set; }
+
+    public string? LastCompletionKey { get; set; }
+
+    public ICollection<ArticleFeedEntry> ArticleEntries { get; set; } = new List<ArticleFeedEntry>();
 }

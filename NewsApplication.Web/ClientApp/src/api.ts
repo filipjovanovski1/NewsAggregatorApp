@@ -113,6 +113,32 @@ export type TopCity = {
     population?: number | null;
 };
 
+export type ChatCitation = {
+    articleId: string;
+    title: string;
+    publisher: string;
+    url: string;
+    publishedTime?: string;
+};
+
+export type ChatResponse = {
+    conversationId: string;
+    answer: string;
+    scope?: { scopeKey: string; label?: string };
+    citations: ChatCitation[];
+    suggestedQuestions: string[];
+};
+
+export type ChatRequest = {
+    conversationId?: string | null;
+    message: string;
+    context?: {
+        scopeKey?: string;
+        scopeLabel?: string;
+        visibleArticleIds?: string[];
+    };
+};
+
 // ---------- flow header helper ----------
 type SearchBarFlow = { flowId: string; code: string; text?: string; extra?: unknown };
 
@@ -233,6 +259,21 @@ export function fetchTopCities(countryIso2: string, limit = 20): Promise<TopCity
         limit: String(limit)
     });
     return getJSON<TopCity[]>(`/search/cities/top?${searchParams.toString()}`);
+}
+
+export function sendNewsChatMessage(body: ChatRequest): Promise<ChatResponse> {
+    return getJSON<ChatResponse>('/agent/v1/chat', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+    });
+}
+
+export async function resetNewsChat(conversationId: string): Promise<void> {
+    const response = await fetch(`/agent/v1/conversations/${encodeURIComponent(conversationId)}`, {
+        method: 'DELETE',
+    });
+    if (!response.ok) throw new Error(`HTTP ${response.status}`);
 }
 
 // ---------- Mapping helper: SearchItem -> ArticleDto for your UI ----------

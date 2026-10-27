@@ -1,4 +1,4 @@
-﻿apiVersion: v1
+apiVersion: v1
 kind: Service
 metadata:
   name: newsapp-api
@@ -58,12 +58,6 @@ spec:
                   name: newsapp-secrets
                   key: POSTGRES_DB
 
-            - name: Newsdata__ApiKey
-              valueFrom:
-                secretKeyRef:
-                  name: newsapp-secrets
-                  key: NEWSDATA_API_KEY
-
             - name: Dev__AdminToken
               valueFrom:
                 secretKeyRef:
@@ -74,8 +68,37 @@ spec:
               valueFrom:
                 secretKeyRef:
                   name: newsapp-secrets
-                  key: DISCOVERY_PIPELINE_SHARED_SECRET
+                  key: DISCOVERY_CALLBACK_TOKEN
+
+            - name: FeedIngestion__Token
+              valueFrom:
+                secretKeyRef:
+                  name: newsapp-secrets
+                  key: FEED_INGESTION_TOKEN
+
+            - name: Agent__Token
+              valueFrom:
+                secretKeyRef:
+                  name: newsapp-secrets
+                  key: NEWS_AGENT_TOKEN
 
             # Build the connection string from the env vars above
             - name: ConnectionStrings__Default
               value: "Host=postgres;Port=5432;Database=$(POSTGRES_DB);Username=$(POSTGRES_USER);Password=$(POSTGRES_PASSWORD);Include Error Detail=true"
+          startupProbe:
+            httpGet:
+              path: /_routes
+              port: 8080
+            failureThreshold: 30
+            periodSeconds: 5
+          readinessProbe:
+            httpGet:
+              path: /_routes
+              port: 8080
+            periodSeconds: 10
+          livenessProbe:
+            httpGet:
+              path: /_routes
+              port: 8080
+            periodSeconds: 30
+            failureThreshold: 3

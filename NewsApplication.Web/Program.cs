@@ -11,13 +11,11 @@ using NewsApplication.Repository.Db.Interfaces;
 using NewsApplication.Repository.Db.Interfaces.Discovery;
 using NewsApplication.Service.Implementations;
 using NewsApplication.Service.Implementations.Client;
-using NewsApplication.Service.Implementations.Ingestion;
 using NewsApplication.Service.Implementations.Discovery;
 using NewsApplication.Service.Implementations.Discovery.Workers;
 using NewsApplication.Service.Interfaces;
 using NewsApplication.Service.Interfaces.Client;
 using NewsApplication.Service.Interfaces.Discovery;
-using NewsApplication.Service.Interfaces.Ingestion;
 using Npgsql;
 using System.Collections.Generic;
 using System.Linq;
@@ -69,6 +67,7 @@ builder.Services.AddScoped<CityImporter>();
 builder.Services.AddScoped<ICityReadRepository, CityReadRepository>();
 builder.Services.AddScoped<ICountryReadRepository, CountryReadRepository>();
 builder.Services.AddScoped<IArticleRepository, ArticleRepository>();
+builder.Services.AddScoped<IFeedIngestionRepository, FeedIngestionRepository>();
 builder.Services.AddScoped<IDiscoveryTargetRepository, DiscoveryTargetRepository>();
 builder.Services.AddScoped<IDiscoveryJobRepository, DiscoveryJobRepository>();
 builder.Services.AddScoped<INewsSourceRepository, NewsSourceRepository>();
@@ -77,24 +76,17 @@ builder.Services.AddScoped<INewsSourceRepository, NewsSourceRepository>();
 builder.Services.AddScoped<ICityReadService, CityReadService>();
 builder.Services.AddScoped<ICountryReadService, CountryReadService>();
 builder.Services.AddSingleton<IQueryTokenizer, QueryTokenizer>();
+builder.Services.AddScoped<IStoredArticleSearchService, StoredArticleSearchService>();
 
 // Scope Preview
 builder.Services.AddScoped<IScopePolicy, ScopePolicy>();
 builder.Services.AddScoped<IScopeResolverService, ScopeResolverService>();
 
-builder.Services.Configure<NewsdataOptions>(builder.Configuration.GetSection("Newsdata"));
-builder.Services.AddHttpClient<INewsdataClient, NewsdataClient>((sp, http) =>
-{
-    var opt = sp.GetRequiredService<Microsoft.Extensions.Options.IOptions<NewsdataOptions>>().Value;
-    http.BaseAddress = new Uri(opt.BaseUrl); // full endpoint
-});
 builder.Services.AddHttpClient("nominatim", http =>
 {
     http.BaseAddress = new Uri("https://nominatim.openstreetmap.org/");
     http.DefaultRequestHeaders.UserAgent.ParseAdd("NewsAggregatorApp/1.0 (+https://newsaggregatorapp.local/contact)");
 });
-builder.Services.AddScoped<IArticleIngestionService, ArticleIngestionService>();
-
 builder.Services.Configure<DiscoveryPipelineOptions>(
     builder.Configuration.GetSection("DiscoveryPipeline"));
 builder.Services.AddHttpClient<IDiscoveryPipelineClient, DiscoveryPipelineClient>((sp, http) =>
@@ -115,7 +107,8 @@ builder.Services.AddHttpClient("rss", http =>
 builder.Services.AddHostedService<DiscoveryDispatcherWorker>();
 builder.Services.AddHostedService<StaleDiscoveryJobWorker>();
 builder.Services.AddHostedService<FeedRevalidationWorker>();
-builder.Services.AddHostedService<RssPollingWorker>();
+if (!builder.Configuration.GetValue<bool>("FeedIngestion:ExternalWorkerEnabled"))
+    builder.Services.AddHostedService<RssPollingWorker>();
 
 builder.Services.AddControllers(); 
 builder.Services.AddEndpointsApiExplorer();
@@ -156,9 +149,27 @@ app.MapGet("/_routes", (IEnumerable<EndpointDataSource> sources) =>
 
 var devEnabled = builder.Configuration.GetValue<bool>("Dev:Enabled", builder.Environment.IsDevelopment());
 var devToken = builder.Configuration["Dev:AdminToken"]; // from env/secrets
+var agentToken = builder.Configuration["Agent:Token"];
 
 app.Use(async (ctx, next) =>
 {
+    if (ctx.Request.Path.StartsWithSegments("/api/internal/agent", StringComparison.OrdinalIgnoreCase))
+    {
+        if (string.IsNullOrWhiteSpace(agentToken))
+        {
+            ctx.Response.StatusCode = StatusCodes.Status503ServiceUnavailable;
+            await ctx.Response.WriteAsync("Agent service token not configured.");
+            return;
+        }
+
+        if (!ctx.Request.Headers.TryGetValue("X-Agent-Token", out var provided) ||
+            !FixedTimeEquals(provided.ToString(), agentToken))
+        {
+            ctx.Response.StatusCode = StatusCodes.Status401Unauthorized;
+            return;
+        }
+    }
+
     if (ctx.Request.Path.StartsWithSegments("/dev", StringComparison.OrdinalIgnoreCase))
     {
         // If disabled -> pretend it doesn't exist

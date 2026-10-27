@@ -5,7 +5,6 @@ using NewsApplication.Repository.Db;
 using NewsApplication.Repository.Db.Importers;
 using NewsApplication.Repository.Db.Interfaces;
 using NewsApplication.Service.Interfaces;
-using NewsApplication.Service.Interfaces.Ingestion;
 using NewsApplication.Domain.DomainModels.Discovery;
 using NewsApplication.Service.Interfaces.Discovery;
 

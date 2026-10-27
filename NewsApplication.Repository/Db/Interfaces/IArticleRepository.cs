@@ -1,5 +1,6 @@
 ﻿using NewsApplication.Domain.Cache;
 using NewsApplication.Domain.DomainModels;
+using NewsApplication.Domain.DTOs.Scopes;
 
 namespace NewsApplication.Repository.Db.Interfaces;
 
@@ -53,5 +54,13 @@ public interface IArticleRepository
     Task<List<Article>> LoadArticlesByIdsAsync(IEnumerable<Guid> ids, CancellationToken ct = default);
     Task<bool> PruneDuplicateTitlesForCacheAsync(string scopeKey, int page, CancellationToken ct = default);
     Task<bool> HasFreshPageAsync(string scopeKey, int page, DateTimeOffset now, CancellationToken ct = default);
+
+    Task<StoredArticleSearchResult> SearchStoredAsync(
+        StoredArticleSearchCriteria criteria,
+        int offset,
+        int limit,
+        CancellationToken ct = default);
+
+    Task<Article?> GetStoredByIdAsync(Guid id, CancellationToken ct = default);
 
 }

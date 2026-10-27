@@ -1,4 +1,4 @@
-﻿import { useEffect, useMemo, useState } from 'react';
+﻿import { useEffect, useState } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
 import { ChevronLeft, ChevronRight, MapPin, Newspaper, X } from 'lucide-react';
 
@@ -30,7 +30,7 @@ export default function ArticleOverlay({
     onClose,
     title,
 }: Props) {
-    const [direction, setDirection] = useState(0);
+    const [activeIndex, setActiveIndex] = useState(0);
     const [touchStart, setTouchStart] = useState<number | null>(null);
     const [touchEnd, setTouchEnd] = useState<number | null>(null);
 
@@ -54,11 +54,9 @@ export default function ArticleOverlay({
         const isRightSwipe = distance < -minSwipeDistance;
 
         if (isLeftSwipe && canNext) {
-            setDirection(1);
             onNext();
         }
         if (isRightSwipe && canPrev) {
-            setDirection(-1);
             onPrev();
         }
     };
@@ -66,11 +64,9 @@ export default function ArticleOverlay({
     useEffect(() => {
         const onKey = (e: KeyboardEvent) => {
             if (e.key === 'ArrowLeft' && canPrev) {
-                setDirection(-1);
                 onPrev();
             }
             if (e.key === 'ArrowRight' && canNext) {
-                setDirection(1);
                 onNext();
             }
             if (e.key === 'Escape') onClose();
@@ -79,41 +75,30 @@ export default function ArticleOverlay({
         return () => window.removeEventListener('keydown', onKey);
     }, [onPrev, onNext, onClose, canPrev, canNext]);
 
-    // Adjust items per page based on screen size
-    const getItemsToShow = () => {
-        if (typeof window === 'undefined') return 6;
-        const width = window.innerWidth;
-        if (width < 640) return 2; // Mobile: 1 column, 2 items
-        if (width < 1024) return 4; // Tablet: 2 columns, 4 items
-        return 6; // Desktop: 3 columns, 6 items
-    };
-
-    const [itemsToShow, setItemsToShow] = useState(getItemsToShow());
-
-    useEffect(() => {
-        const handleResize = () => {
-            setItemsToShow(getItemsToShow());
-        };
-
-        window.addEventListener('resize', handleResize);
-        return () => window.removeEventListener('resize', handleResize);
-    }, []);
-
-    const shown = useMemo(() => items.slice(0, itemsToShow), [items, itemsToShow]);
     const totalNum = total ?? items.length;
     const totalPages = Math.max(1, Math.ceil(totalNum / pageSize));
 
     const pageDots = Array.from({ length: Math.min(totalPages, 5) }, (_, i) => i + 1);
 
     const handlePrev = () => {
-        setDirection(-1);
-        onPrev();
+        if (activeIndex > 0) {
+            setActiveIndex((current) => current - 1);
+        } else if (canPrev) {
+            onPrev();
+        }
     };
 
     const handleNext = () => {
-        setDirection(1);
-        onNext();
+        if (activeIndex < items.length - 1) {
+            setActiveIndex((current) => current + 1);
+        } else if (canNext) {
+            onNext();
+        }
     };
+
+    useEffect(() => {
+        setActiveIndex(0);
+    }, [page]);
 
     // Get icon size based on screen - scaled for 15.6"
     const getIconSize = () => {
@@ -191,7 +176,7 @@ export default function ArticleOverlay({
                     <div className="article-overlay-body">
                         <motion.button
                             onClick={handlePrev}
-                            disabled={!canPrev}
+                            disabled={activeIndex === 0 && !canPrev}
                             className="article-overlay-arrow"
                             whileHover={canPrev ? { scale: 1.05 } : {}}
                             whileTap={canPrev ? { scale: 0.96 } : {}}
@@ -199,32 +184,74 @@ export default function ArticleOverlay({
                         >
                             <ChevronLeft size={18} />
                         </motion.button>
-
                         <div className="article-overlay-grid">
-                            <AnimatePresence mode="wait" custom={direction}>
-                                <motion.div
-                                    key={page}
-                                    custom={direction}
-                                    initial={{ x: direction > 0 ? 40 : -40, opacity: 0, scale: 0.98 }}
-                                    animate={{ x: 0, opacity: 1, scale: 1 }}
-                                    exit={{ x: direction > 0 ? -40 : 40, opacity: 0, scale: 0.98 }}
-                                    transition={{
-                                        x: { type: 'spring', stiffness: 320, damping: 32 },
-                                        opacity: { duration: 0.2 },
-                                    }}
-                                >
-                                    <div className="article-overlay-grid-inner">
-                                        {shown.map((article, idx) => (
-                                            <ArticleCard key={article.id} article={article} index={idx} />
-                                        ))}
-                                    </div>
-                                </motion.div>
-                            </AnimatePresence>
+                            <div className="article-carousel-stage">
+                                <AnimatePresence initial={false}>
+                                    {items.map((article, index) => {
+                                        const offset = index - activeIndex;
+
+                                        // Only render cards close to the active one
+                                        if (Math.abs(offset) > 2) return null;
+
+                                        return (
+                                            <motion.div
+                                                key={article.url}
+                                                className={`article-carousel-moving-card ${
+                                                    offset === 0 ? 'is-active' : ''
+                                                }`}
+                                                initial={false}
+                                                animate={{
+                                                    x:
+                                                        offset === 0
+                                                            ? '0%'
+                                                            : offset === -1
+                                                            ? '-112%'
+                                                            : offset === 1
+                                                            ? '112%'
+                                                            : offset < 0
+                                                            ? '-225%'
+                                                            : '225%',
+                                                    scale: offset === 0 ? 1.12 : 0.92,
+                                                    opacity:
+                                                        Math.abs(offset) <= 1
+                                                            ? offset === 0
+                                                                ? 1
+                                                                : 0.55
+                                                            : 0,
+                                                    zIndex: offset === 0 ? 3 : 1,
+                                                }}
+                                                transition={{
+                                                    x: {
+                                                        type: 'spring',
+                                                        stiffness: 180,
+                                                        damping: 24,
+                                                        mass: 0.9,
+                                                    },
+                                                    scale: {
+                                                        type: 'spring',
+                                                        stiffness: 180,
+                                                        damping: 24,
+                                                    },
+                                                    opacity: {
+                                                        duration: 0.25,
+                                                    },
+                                                }}
+                                            >
+                                                <ArticleCard
+                                                    article={article}
+                                                    index={index}
+                                                    active={offset === 0}
+                                                />
+                                            </motion.div>
+                                        );
+                                    })}
+                                </AnimatePresence>
+                            </div>
                         </div>
 
                         <motion.button
                             onClick={handleNext}
-                            disabled={!canNext}
+                            disabled={activeIndex === items.length - 1 && !canNext}
                             className="article-overlay-arrow"
                             whileHover={canNext ? { scale: 1.05 } : {}}
                             whileTap={canNext ? { scale: 0.96 } : {}}

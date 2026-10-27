@@ -1,6 +1,8 @@
 ﻿using Microsoft.EntityFrameworkCore;
 using NewsApplication.Domain.Cache;
 using NewsApplication.Domain.DomainModels;
+using NewsApplication.Domain.DomainModels.Discovery;
+using NewsApplication.Domain.DTOs.Scopes;
 using NewsApplication.Domain.Helpers;
 using NewsApplication.Repository.Db;
 using NewsApplication.Repository.Db.Interfaces;
@@ -205,7 +207,8 @@ public sealed class ArticleRepository : IArticleRepository
         if (orphanIds.Length > 0)
         {
             await _db.Articles
-                .Where(a => orphanIds.Contains(a.Id))
+                .Where(a => orphanIds.Contains(a.Id) &&
+                            !_db.ArticleFeedEntries.Any(f => f.ArticleId == a.Id))
                 .ExecuteDeleteAsync(ct);
         }
 
@@ -250,6 +253,10 @@ public sealed class ArticleRepository : IArticleRepository
         WHERE NOT EXISTS (
             SELECT 1 FROM public.""ArticleCacheItems"" i
             WHERE i.""ArticleId"" = a.""Id""
+        )
+        AND NOT EXISTS (
+            SELECT 1 FROM public.""ArticleFeedEntries"" f
+            WHERE f.""ArticleId"" = a.""Id""
         )
         AND a.""InsertedAt"" < (now() - {safetyWindow});", ct);
     }
@@ -325,5 +332,83 @@ public sealed class ArticleRepository : IArticleRepository
     public Task<bool> HasFreshPageAsync(string scopeKey, int page, DateTimeOffset now, CancellationToken ct = default)
     => _db.ArticleCaches
         .AnyAsync(c => c.ScopeKey == scopeKey && c.Page == page && c.ExpiresAt > now, ct);
+
+    public async Task<StoredArticleSearchResult> SearchStoredAsync(
+        StoredArticleSearchCriteria criteria,
+        int offset,
+        int limit,
+        CancellationToken ct = default)
+    {
+        Guid? cityId = null;
+        if (!string.IsNullOrWhiteSpace(criteria.CitySlug))
+        {
+            var candidates = await _db.Cities
+                .AsNoTracking()
+                .Where(x => criteria.CountryIso2 == null || x.CountryIso2 == criteria.CountryIso2)
+                .Select(x => new { x.Id, x.Name, x.LocalName, x.CountryIso2 })
+                .ToListAsync(ct);
+
+            cityId = candidates
+                .Where(x => string.Equals(
+                    CityScopeSlug(x.Name, x.CountryIso2),
+                    criteria.CitySlug,
+                    StringComparison.Ordinal) ||
+                    (!string.IsNullOrWhiteSpace(x.LocalName) && string.Equals(
+                        CityScopeSlug(x.LocalName, x.CountryIso2),
+                        criteria.CitySlug,
+                        StringComparison.Ordinal)))
+                .Select(x => (Guid?)x.Id)
+                .FirstOrDefault();
+        }
+
+        var countryIso2 = criteria.CountryIso2;
+        var matchingCityId = cityId;
+        var query = _db.Articles
+            .AsNoTracking()
+            .Where(article => article.FeedEntries.Any(entry =>
+                entry.NewsSourceFeed != null &&
+                entry.NewsSourceFeed.IsActive &&
+                entry.NewsSourceFeed.NewsSource != null &&
+                entry.NewsSourceFeed.NewsSource.IsActive &&
+                entry.NewsSourceFeed.NewsSource.Classification == SourceClassifications.NewsSource &&
+                entry.NewsSourceFeed.NewsSource.Scopes.Any(scope =>
+                    !scope.IsStale &&
+                    (countryIso2 == null || scope.CountryIso2 == countryIso2) &&
+                    (matchingCityId == null || scope.CityId == null || scope.CityId == matchingCityId))));
+
+        foreach (var keyword in criteria.Keywords)
+        {
+            var pattern = $"%{keyword}%";
+            query = query.Where(article =>
+                EF.Functions.ILike(article.Title, pattern) ||
+                (article.Description != null && EF.Functions.ILike(article.Description, pattern)) ||
+                (article.ContentText != null && EF.Functions.ILike(article.ContentText, pattern)) ||
+                EF.Functions.ILike(article.Publisher, pattern));
+        }
+
+        var total = await query.CountAsync(ct);
+        var items = await query
+            .OrderByDescending(x => x.PublishedTime)
+            .ThenByDescending(x => x.InsertedAt)
+            .Skip(Math.Max(0, offset))
+            .Take(Math.Clamp(limit, 1, 100))
+            .ToListAsync(ct);
+
+        return new StoredArticleSearchResult(items, total);
+    }
+
+    public Task<Article?> GetStoredByIdAsync(Guid id, CancellationToken ct = default) =>
+        _db.Articles
+            .AsNoTracking()
+            .Where(article => article.Id == id && article.FeedEntries.Any(entry =>
+                entry.NewsSourceFeed != null &&
+                entry.NewsSourceFeed.IsActive &&
+                entry.NewsSourceFeed.NewsSource != null &&
+                entry.NewsSourceFeed.NewsSource.IsActive &&
+                entry.NewsSourceFeed.NewsSource.Classification == SourceClassifications.NewsSource))
+            .FirstOrDefaultAsync(ct);
+
+    private static string CityScopeSlug(string value, string countryIso2) =>
+        $"{ArticleScopeKey.Slugify(value)}-{countryIso2.ToLowerInvariant()}";
 
 }
