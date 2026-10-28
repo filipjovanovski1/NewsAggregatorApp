@@ -9,9 +9,21 @@ from .schemas import ChatContext
 
 
 @dataclass
+class GroundedArticle:
+    article_id: str
+    title: str
+    publisher: str
+    url: str = ""
+    published_time: str | None = None
+    description: str | None = None
+    image_url: str | None = None
+
+
+@dataclass
 class Turn:
     role: str
     content: str
+    grounded_articles: list[GroundedArticle] = field(default_factory=list)
 
 
 @dataclass
@@ -50,13 +62,26 @@ class InMemorySessionStore:
             conversation.touched_at = time.monotonic()
             return conversation
 
-    async def append(self, conversation_id: str, user_message: str, assistant_message: str) -> None:
+    async def append(
+        self,
+        conversation_id: str,
+        user_message: str,
+        assistant_message: str,
+        grounded_articles: list[GroundedArticle] | None = None,
+    ) -> None:
         async with self._lock:
             conversation = self._sessions.get(conversation_id)
             if conversation is None:
                 return
             conversation.turns.extend(
-                [Turn(role="user", content=user_message), Turn(role="assistant", content=assistant_message)]
+                [
+                    Turn(role="user", content=user_message),
+                    Turn(
+                        role="assistant",
+                        content=assistant_message,
+                        grounded_articles=list(grounded_articles or []),
+                    ),
+                ]
             )
             conversation.turns = conversation.turns[-self._max_history_messages :]
             conversation.touched_at = time.monotonic()

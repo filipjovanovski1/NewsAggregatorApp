@@ -119,6 +119,8 @@ export type ChatCitation = {
     publisher: string;
     url: string;
     publishedTime?: string;
+    description?: string;
+    imageUrl?: string;
 };
 
 export type ChatResponse = {

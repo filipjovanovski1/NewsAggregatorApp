@@ -25,6 +25,8 @@ class Citation(ApiModel):
     publisher: str
     url: str
     published_time: str | None = Field(default=None, alias="publishedTime")
+    description: str | None = None
+    image_url: str | None = Field(default=None, alias="imageUrl")
 
 
 class ResolvedScope(ApiModel):

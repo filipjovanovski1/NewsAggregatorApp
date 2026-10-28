@@ -12,6 +12,7 @@ import {
     prewarm,
     fetchTopCities,
     toArticleDto,
+    type ChatResponse,
     type ResolveScopeResponse,
     type PreviewGeoCandidate
 } from './api';
@@ -81,6 +82,8 @@ export default function App() {
     const [globeSel, setGlobeSel] = useState<ScopeSel | null>(null);
     const [activeSource, setActiveSource] = useState<'searchbar' | 'globe'>('searchbar');
     const [overlayOpen, setOverlayOpen] = useState(false);
+    const [assistantResult, setAssistantResult] = useState<{ question: string; answer: string } | null>(null);
+    const [assistantScopeLabel, setAssistantScopeLabel] = useState<string | null>(null);
     const [currentScopeKey, setCurrentScopeKey] = useState<string | null>(null);
     const [page, setPage] = useState(1);
 
@@ -106,6 +109,8 @@ export default function App() {
 
     const load = useCallback(async (key: string, uiPage: number) => {
         const res = await searchArticles(key, uiPage);
+        setAssistantResult(null);
+        setAssistantScopeLabel(null);
         setCurrentScopeKey(key);
         setItems(res.items.map(toArticleDto));
         setPage(res.uiPage);
@@ -227,7 +232,7 @@ export default function App() {
         [buildSelection, commitSelection]
     );
 
-    async function onSearch(q: string, opts?: { countryIso2?: string }) {
+    const onSearch = useCallback(async (q: string, opts?: { countryIso2?: string }) => {
         const trimmed = q.trim();
         if (!trimmed) return;
 
@@ -252,7 +257,7 @@ export default function App() {
         } catch (err) {
             console.error(err);
         }
-    }
+    }, [load, normalize, resolveAndLoad, searchSel]);
 
     function onAmbiguous(model: {
         outlineIso2?: string | null;
@@ -453,6 +458,35 @@ export default function App() {
 
     const activeSel = activeSource === 'searchbar' ? searchSel : globeSel;
 
+    const handleAssistantResult = useCallback((response: ChatResponse, question: string) => {
+        const knownArticles = new Map(items.map(article => [article.id.toLowerCase(), article]));
+        const relevantArticles: ArticleDto[] = response.citations.map(citation => {
+            const known = knownArticles.get(citation.articleId.toLowerCase());
+            return {
+                ...known,
+                id: citation.articleId,
+                title: citation.title,
+                url: citation.url,
+                description: citation.description ?? known?.description ?? known?.snippet,
+                snippet: citation.description ?? known?.snippet ?? known?.description,
+                sourceName: citation.publisher || known?.sourceName,
+                imageUrl: citation.imageUrl ?? known?.imageUrl,
+                publishedUtc: citation.publishedTime ?? known?.publishedUtc,
+            };
+        });
+
+        setAssistantResult({ question, answer: response.answer });
+        setAssistantScopeLabel(response.scope?.label ?? activeSel?.label ?? null);
+        setItems(relevantArticles);
+        setTotal(relevantArticles.length);
+        setPage(1);
+        setCanPrev(false);
+        setCanNext(false);
+        setNextProviderPage(null);
+        if (response.scope?.scopeKey) setCurrentScopeKey(response.scope.scopeKey);
+        setOverlayOpen(true);
+    }, [activeSel?.label, items]);
+
     const handleMarkerClick = useCallback((point?: CityPoint | null) => {
         if (!point) return;
         const focusLat = isFiniteNumber(point.lat) ? point.lat : undefined;
@@ -608,26 +642,29 @@ export default function App() {
                 </div>
             </div>
 
-            {overlayOpen && activeSel && (
+            {overlayOpen && (activeSel || assistantResult) && (
                 <ArticleOverlay
-                    title={activeSel.label || 'Articles'}
+                    title={assistantScopeLabel ?? activeSel?.label ?? 'Relevant news'}
                     items={items}
                     total={total}
                     page={page}
                     pageSize={UI_PAGE_SIZE}
                     canPrev={canPrev}
                     canNext={canNext}
-                    onPrev={() => { if (activeSel.scopeKey && page > 1) void load(activeSel.scopeKey, page - 1); }}
-                    onNext={() => { if (activeSel.scopeKey) void load(activeSel.scopeKey, page + 1); }}
+                    onPrev={() => { if (activeSel?.scopeKey && page > 1) void load(activeSel.scopeKey, page - 1); }}
+                    onNext={() => { if (activeSel?.scopeKey) void load(activeSel.scopeKey, page + 1); }}
                     onClose={() => {
                         setOverlayOpen(false);
                     }}
+                    assistantResult={assistantResult}
                 />
             )}
 
             <NewsChat
                 scopeKey={activeSel?.scopeKey}
                 scopeLabel={activeSel?.label}
+                visibleArticleIds={items.map(article => article.id)}
+                onResult={handleAssistantResult}
             />
         </div>
     );

@@ -5,6 +5,11 @@ export default defineConfig({
     server: {
         port: 5173,
         proxy: {
+            '/agent': {
+                target: 'http://localhost:8090',
+                changeOrigin: true,
+                rewrite: (path) => path.replace(/^\/agent/, ''),
+            },
             '/scope': {
                 target: 'https://localhost:7146',
                 changeOrigin: true,

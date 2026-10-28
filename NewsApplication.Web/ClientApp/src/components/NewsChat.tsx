@@ -1,57 +1,38 @@
-import { useEffect, useRef, useState, type FormEvent, type KeyboardEvent } from 'react';
-import { Bot, ExternalLink, LoaderCircle, MessageCircle, RotateCcw, Send, X } from 'lucide-react';
+import { useState, type FormEvent, type KeyboardEvent } from 'react';
+import { LoaderCircle, RotateCcw, Send, Sparkles } from 'lucide-react';
 
 import {
     resetNewsChat,
     sendNewsChatMessage,
-    type ChatCitation,
     type ChatResponse,
 } from '../api';
 
 interface Props {
     scopeKey?: string | null;
     scopeLabel?: string | null;
+    visibleArticleIds?: string[];
+    onResult: (response: ChatResponse, question: string) => void;
 }
 
-type UiMessage = {
-    id: number;
-    role: 'assistant' | 'user';
-    text: string;
-    citations?: ChatCitation[];
-};
-
-const welcomeMessage: UiMessage = {
-    id: 0,
-    role: 'assistant',
-    text: 'Ask me about the RSS news stored in this app. I will answer with article citations.',
-};
-
-export default function NewsChat({ scopeKey, scopeLabel }: Props) {
-    const [open, setOpen] = useState(false);
+export default function NewsChat({
+    scopeKey,
+    scopeLabel,
+    visibleArticleIds = [],
+    onResult,
+}: Props) {
     const [conversationId, setConversationId] = useState<string | null>(null);
-    const [messages, setMessages] = useState<UiMessage[]>([welcomeMessage]);
     const [draft, setDraft] = useState('');
     const [loading, setLoading] = useState(false);
+    const [error, setError] = useState<string | null>(null);
     const [conversationScope, setConversationScope] = useState<ChatResponse['scope']>(undefined);
-    const messageId = useRef(1);
-    const scrollArea = useRef<HTMLDivElement>(null);
-
-    useEffect(() => {
-        if (!open) return;
-        scrollArea.current?.scrollTo({ top: scrollArea.current.scrollHeight, behavior: 'smooth' });
-    }, [messages, loading, open]);
 
     const submit = async (event?: FormEvent) => {
         event?.preventDefault();
         const message = draft.trim();
         if (!message || loading) return;
 
-        setDraft('');
-        setMessages(current => [
-            ...current,
-            { id: messageId.current++, role: 'user', text: message },
-        ]);
         setLoading(true);
+        setError(null);
 
         try {
             const activeScopeKey = conversationScope?.scopeKey ?? scopeKey ?? undefined;
@@ -62,30 +43,16 @@ export default function NewsChat({ scopeKey, scopeLabel }: Props) {
                 context: {
                     scopeKey: activeScopeKey,
                     scopeLabel: activeScopeLabel,
-                    visibleArticleIds: [],
+                    visibleArticleIds,
                 },
             });
+
             setConversationId(response.conversationId);
             if (response.scope) setConversationScope(response.scope);
-            setMessages(current => [
-                ...current,
-                {
-                    id: messageId.current++,
-                    role: 'assistant',
-                    text: response.answer,
-                    citations: response.citations,
-                },
-            ]);
-        } catch (error) {
-            const detail = error instanceof Error ? error.message : 'Unknown error';
-            setMessages(current => [
-                ...current,
-                {
-                    id: messageId.current++,
-                    role: 'assistant',
-                    text: `I could not complete that request. ${detail}`,
-                },
-            ]);
+            setDraft('');
+            onResult(response, message);
+        } catch (caught) {
+            setError(caught instanceof Error ? caught.message : 'The news assistant is unavailable.');
         } finally {
             setLoading(false);
         }
@@ -97,8 +64,8 @@ export default function NewsChat({ scopeKey, scopeLabel }: Props) {
         }
         setConversationId(null);
         setConversationScope(undefined);
-        setMessages([welcomeMessage]);
         setDraft('');
+        setError(null);
     };
 
     const onKeyDown = (event: KeyboardEvent<HTMLTextAreaElement>) => {
@@ -108,80 +75,54 @@ export default function NewsChat({ scopeKey, scopeLabel }: Props) {
         }
     };
 
-    if (!open) {
-        return (
-            <button className="news-chat-launcher" onClick={() => setOpen(true)} aria-label="Open news chatbot">
-                <MessageCircle size={22} />
-                <span>Ask AI</span>
-            </button>
-        );
-    }
-
     const activeScopeLabel = conversationScope?.label ?? scopeLabel;
 
     return (
-        <section className="news-chat-panel" aria-label="News chatbot">
-            <header className="news-chat-header">
-                <div className="news-chat-heading">
-                    <span className="news-chat-avatar"><Bot size={18} /></span>
-                    <div>
-                        <strong>News assistant</strong>
-                        <span>{activeScopeLabel ? `Using ${activeScopeLabel}` : 'Searches stored RSS articles'}</span>
-                    </div>
+        <section className="news-ai-composer" aria-label="Ask the news assistant">
+            <form className="news-ai-composer__form" onSubmit={submit}>
+                <span className="news-ai-composer__icon" aria-hidden>
+                    <Sparkles size={22} />
+                </span>
+                <div className="news-ai-composer__field">
+                    <textarea
+                        value={draft}
+                        onChange={event => setDraft(event.target.value)}
+                        onKeyDown={onKeyDown}
+                        placeholder={activeScopeLabel
+                            ? `Ask AI about ${activeScopeLabel}…`
+                            : 'Ask AI about the news in any city or country…'}
+                        rows={1}
+                        disabled={loading}
+                        aria-label="Ask the news assistant"
+                    />
+                    <span className={`news-ai-composer__status ${error ? 'is-error' : ''}`} role="status">
+                        {error
+                            ? 'Could not get an answer. Please try again.'
+                            : loading
+                                ? 'Finding the most relevant reporting…'
+                                : 'Press Enter to ask · Shift + Enter for a new line'}
+                    </span>
                 </div>
-                <div className="news-chat-header-actions">
-                    <button onClick={() => void reset()} aria-label="Reset conversation" title="Reset conversation">
-                        <RotateCcw size={15} />
+                {conversationId && (
+                    <button
+                        type="button"
+                        className="news-ai-composer__reset"
+                        onClick={() => void reset()}
+                        aria-label="Start a new AI conversation"
+                        title="New conversation"
+                    >
+                        <RotateCcw size={18} />
                     </button>
-                    <button onClick={() => setOpen(false)} aria-label="Close chatbot">
-                        <X size={17} />
-                    </button>
-                </div>
-            </header>
-
-            <div className="news-chat-messages" ref={scrollArea} aria-live="polite">
-                {messages.map(message => (
-                    <article key={message.id} className={`news-chat-message news-chat-message--${message.role}`}>
-                        <p>{message.text}</p>
-                        {!!message.citations?.length && (
-                            <div className="news-chat-citations">
-                                {message.citations.map((citation, index) => (
-                                    <a key={citation.articleId} href={citation.url} target="_blank" rel="noreferrer">
-                                        <span>{index + 1}</span>
-                                        <div>
-                                            <strong>{citation.title}</strong>
-                                            <small>{citation.publisher}</small>
-                                        </div>
-                                        <ExternalLink size={13} />
-                                    </a>
-                                ))}
-                            </div>
-                        )}
-                    </article>
-                ))}
-                {loading && (
-                    <div className="news-chat-thinking">
-                        <LoaderCircle size={16} />
-                        <span>Searching articles and preparing an answer…</span>
-                    </div>
                 )}
-            </div>
-
-            <form className="news-chat-form" onSubmit={submit}>
-                <textarea
-                    value={draft}
-                    onChange={event => setDraft(event.target.value)}
-                    onKeyDown={onKeyDown}
-                    placeholder={activeScopeLabel ? `Ask about ${activeScopeLabel}…` : 'Ask about news in a location…'}
-                    rows={2}
-                    disabled={loading}
-                    aria-label="Message the news assistant"
-                />
-                <button type="submit" disabled={loading || !draft.trim()} aria-label="Send message">
-                    <Send size={17} />
+                <button
+                    type="submit"
+                    className={`news-ai-composer__send ${loading ? 'is-loading' : ''}`}
+                    disabled={loading || !draft.trim()}
+                    aria-label="Ask AI"
+                >
+                    {loading ? <LoaderCircle size={21} /> : <Send size={20} />}
                 </button>
             </form>
-            <footer className="news-chat-disclaimer">Answers use articles in your local database.</footer>
         </section>
     );
 }
